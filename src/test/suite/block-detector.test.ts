@@ -44,7 +44,10 @@ suite("BlockDetector Test Suite", () => {
     expectedEndLine: number,
   ): void {
     const doc = createMockDocument(code);
-    const range = detector.detectCodeBlock(doc, new vscode.Position(startLine, 0));
+    const range = detector.detectCodeBlock(
+      doc,
+      new vscode.Position(startLine, 0),
+    );
     assert.strictEqual(range.start.line, startLine);
     assert.strictEqual(range.end.line, expectedEndLine);
   }

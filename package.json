@@ -1,35 +1,93 @@
 {
   "name": "protium",
   "displayName": "Protium",
-  "description": "",
+  "description": "Interactive Python REPL for VS Code with flexible execution in your workflow",
   "version": "0.0.1",
+  "icon": "icon.png",
   "engines": {
     "vscode": "^1.105.0"
   },
   "categories": [
-    "Other"
+    "Other",
+    "Debuggers"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onLanguage:python"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "protium.helloWorld",
-        "title": "Hello World"
+        "command": "protium.executeAndMoveNext",
+        "title": "Execute Code and Move Next",
+        "category": "Protium"
+      },
+      {
+        "command": "protium.executeInPlace",
+        "title": "Execute Code in Place",
+        "category": "Protium"
+      },
+      {
+        "command": "protium.interruptExecution",
+        "title": "Interrupt Execution",
+        "category": "Protium"
+      },
+      {
+        "command": "protium.connectToExistingKernel",
+        "title": "Connect to Existing Kernel",
+        "category": "Protium"
+      },
+      {
+        "command": "protium.clearResults",
+        "title": "Clear Results",
+        "category": "Protium"
+      }
+    ],
+    "keybindings": [
+      {
+        "key": "shift+enter",
+        "command": "-python.execSelectionInTerminal",
+        "when": "editorTextFocus && editorLangId == 'python' && !notebookEditorFocused"
+      },
+      {
+        "key": "shift+enter",
+        "command": "protium.executeAndMoveNext",
+        "when": "editorTextFocus && editorLangId == 'python' && !notebookEditorFocused && protium.active"
+      },
+      {
+        "key": "ctrl+enter",
+        "command": "protium.executeInPlace",
+        "when": "editorTextFocus && editorLangId == python && protium.active"
+      },
+      {
+        "key": "ctrl+shift+c",
+        "command": "protium.interruptExecution",
+        "when": "editorTextFocus && editorLangId == python && protium.active"
+      },
+      {
+        "key": "ctrl+backspace",
+        "command": "protium.clearResults",
+        "when": "editorTextFocus && editorLangId == python && protium.active"
       }
     ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
+    "compile": "npm run clean && tsc -p ./ && cp -r src/templates out/",
+    "clean": "rm -rf out",
     "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
-    "test": "node ./out/test/runTest.js"
+    "test": "npm run compile && node ./out/test/run-test.js"
+  },
+  "dependencies": {
+    "@jupyterlab/services": "^7.4.6",
+    "uuid": "^10.0.0",
+    "zeromq": "^6.5.0"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "^22.10.2",
+    "@types/uuid": "^10.0.0",
     "@types/vscode": "^1.105.0",
     "@typescript-eslint/eslint-plugin": "^8.18.1",
     "@typescript-eslint/parser": "^8.18.1",
@@ -47,7 +105,6 @@
     "plugins": [
       "prettier-plugin-organize-imports"
     ],
-    "printWidth": 88,
     "quoteProps": "consistent"
   }
 }

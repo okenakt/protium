@@ -1,26 +1,84 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
-import * as vscode from 'vscode';
+import * as vscode from "vscode";
+import { ExecutionManager } from "./execution";
+import { initializeLogger, logInfo } from "./utils/output-logger";
+import { getActiveEditor, isPythonEditor } from "./utils/vscode-apis";
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
-export function activate(context: vscode.ExtensionContext) {
+let executionManager: ExecutionManager;
 
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "protium" is now active!');
+function readyExtension(editor: vscode.TextEditor) {
+  const isPython = isPythonEditor(editor);
 
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
-	let disposable = vscode.commands.registerCommand('protium.helloWorld', () => {
-		// The code you place here will be executed every time your command is executed
-		// Display a message box to the user
-		vscode.window.showInformationMessage('Hello World from Protium!');
-	});
-
-	context.subscriptions.push(disposable);
+  // Set protium.active context
+  vscode.commands.executeCommand("setContext", "protium.active", isPython);
 }
 
-// This method is called when your extension is deactivated
-export function deactivate() {}
+/**
+ * Activates the Protium extension
+ * Initializes core components, registers commands, and sets up event listeners
+ * @param context - VS Code extension context
+ */
+export function activate(context: vscode.ExtensionContext) {
+  // Initialize output channel for logging
+  const outputChannel = initializeLogger("Protium");
+  context.subscriptions.push(outputChannel);
+
+  // Set initial context if there's already an active Python file
+  const activeEditor = getActiveEditor();
+  if (activeEditor) readyExtension(activeEditor);
+
+  // Set context when Python file is active
+  vscode.window.onDidChangeActiveTextEditor((editor) => {
+    editor && readyExtension(editor);
+  });
+
+  // Initialize execution manager
+  executionManager = new ExecutionManager();
+
+  // Register commands
+  const executeAndMoveNextCmd = vscode.commands.registerCommand(
+    "protium.executeAndMoveNext",
+    () => executionManager.executeAndMoveNext(),
+  );
+
+  const executeInPlaceCmd = vscode.commands.registerCommand(
+    "protium.executeInPlace",
+    () => executionManager.executeInPlace(),
+  );
+
+  const interruptExecutionCmd = vscode.commands.registerCommand(
+    "protium.interruptExecution",
+    () => executionManager.interruptExecution(),
+  );
+
+  const connectToExistingKernelCmd = vscode.commands.registerCommand(
+    "protium.connectToExistingKernel",
+    () => executionManager.connectToExistingKernel(),
+  );
+
+  const clearResultsCmd = vscode.commands.registerCommand(
+    "protium.clearResults",
+    () => executionManager.clearResults(),
+  );
+
+  // Register all disposables
+  context.subscriptions.push(
+    executeAndMoveNextCmd,
+    executeInPlaceCmd,
+    interruptExecutionCmd,
+    connectToExistingKernelCmd,
+    clearResultsCmd,
+    executionManager,
+  );
+
+  logInfo("Protium activated");
+}
+
+/**
+ * Deactivates the Protium extension
+ * Cleans up resources and disposes of components
+ */
+export function deactivate() {
+  if (executionManager) {
+    executionManager.dispose();
+  }
+}

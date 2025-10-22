@@ -1,8 +1,7 @@
 import * as vscode from "vscode";
 
 /**
- * BlockDetector detects Python code blocks for execution
- * Handles detection of functions, classes, loops, and other block structures
+ * BlockDetector detects Python code blocks
  */
 export class BlockDetector {
   private readonly blockStartPatterns = [
@@ -65,7 +64,10 @@ export class BlockDetector {
     const endLine = this.findBlockEnd(document, startLine);
 
     const startPos = new vscode.Position(startLine, 0);
-    const endPos = new vscode.Position(endLine, document.lineAt(endLine).text.length);
+    const endPos = new vscode.Position(
+      endLine,
+      document.lineAt(endLine).text.length,
+    );
 
     return new vscode.Range(startPos, endPos);
   }
@@ -85,7 +87,10 @@ export class BlockDetector {
    * @param startLine Line number to start searching from
    * @returns Line number of the last line in the block
    */
-  private findBlockEnd(document: vscode.TextDocument, startLine: number): number {
+  private findBlockEnd(
+    document: vscode.TextDocument,
+    startLine: number,
+  ): number {
     const startLineText = document.lineAt(startLine).text;
 
     // Check if this line starts a block

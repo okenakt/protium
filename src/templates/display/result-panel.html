@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Protium Results</title>
+    <style>
+      body {
+        padding: 0;
+        margin: 0;
+        background-color: var(--vscode-editor-background);
+        color: var(--vscode-editor-foreground);
+        overflow-x: hidden;
+      }
+
+      .breadcrumb {
+        position: sticky;
+        top: 0;
+        left: 0;
+        right: 0;
+        background-color: var(--vscode-breadcrumb-background);
+        color: var(--vscode-breadcrumb-foreground);
+        padding: 0 16px;
+        height: 22px;
+        line-height: 22px;
+        border-bottom: 1px solid var(--vscode-panel-border);
+        z-index: 100;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .results-container {
+        position: relative;
+        padding: 0 16px 16px 16px;
+        padding-bottom: 100vh;
+      }
+
+      .result-block {
+        position: absolute;
+        left: 16px;
+        right: 16px;
+        top: calc(var(--line-start) * {{lineHeight}}px);
+        min-height: calc((var(--line-end) - var(--line-start) + 1) * {{lineHeight}}px);
+        background-color: var(--vscode-editor-lineHighlightBackground);
+        border-left: 3px solid var(--vscode-focusBorder);
+        border-right: 3px solid var(--vscode-focusBorder);
+        border-top: 2px solid var(--vscode-panel-border);
+        border-bottom: 2px solid var(--vscode-panel-border);
+        line-height: {{lineHeight}}px;
+        padding: 0 8px;
+        display: flex;
+        align-items: flex-start;
+        overflow: auto;
+      }
+
+      .result-block img,
+      .result-block svg {
+        max-width: 100%;
+        height: auto;
+        display: block;
+        margin: 4px 0;
+      }
+
+      .result-block.loading {
+        border-left-color: var(--vscode-progressBar-background);
+        border-right-color: var(--vscode-progressBar-background);
+      }
+
+      .loading-container {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+
+      .loading-spinner {
+        width: calc({{lineHeight}}px * 0.4);
+        height: calc({{lineHeight}}px * 0.4);
+        border: 2px solid var(--vscode-progressBar-background);
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+
+      .loading-text {
+        color: var(--vscode-descriptionForeground);
+        font-style: italic;
+      }
+
+      .checkmark {
+        color: var(--vscode-terminal-ansiGreen);
+        font-weight: bold;
+      }
+
+      pre {
+          overflow-x: auto;
+          white-space: pre-wrap;
+          word-wrap: break-word;
+          margin: 0;
+          padding: 0;
+          background: transparent;
+          flex: 1;
+      }
+
+      .error-text {
+          color: var(--vscode-errorForeground);
+          font-weight: 600;
+      }
+
+      .output-text {
+          color: var(--vscode-terminal-ansiGreen);
+      }
+
+      .empty-state {
+          text-align: center;
+          padding: 40px 20px;
+          color: var(--vscode-descriptionForeground);
+          font-size: 20px;
+          font-weight: bold;
+      }
+
+      .empty-state.hidden {
+          display: none;
+      }
+
+      .empty-state code {
+          background-color: var(--vscode-textCodeBlock-background);
+          padding: 2px 6px;
+          border-radius: 3px;
+      }
+    </style>
+    <script>
+      function handleSetBreadcrumb(text) {
+        // Update breadcrumb
+        const breadcrumb = document.querySelector(".breadcrumb span");
+        if (breadcrumb) breadcrumb.textContent = text;
+      }
+
+      function handleScrollToPosition(scrollPosition) {
+        window.scrollTo(0, scrollPosition);
+      }
+
+      function handleUpdateBlocks(blocks) {
+        // Hide empty state
+        const emptyState = document.querySelector(".empty-state");
+        if (emptyState) emptyState.classList.add("hidden");
+
+        const container = document.querySelector(".results-container");
+        let lowestBottom = 0;
+
+        // Append or replace blocks
+        for (const blockHTML of blocks) {
+          // Create new block element
+          const tmp = document.createElement("div");
+          tmp.innerHTML = blockHTML;
+          const newBlock = tmp.firstElementChild;
+          if (!newBlock) {
+            continue;
+          }
+
+          // Get block attributes
+          const lineStart = newBlock.getAttribute("line-start");
+          const lineEnd = newBlock.getAttribute("line-end");
+          if (!lineStart || !lineEnd) {
+            continue;
+          }
+
+          // Remove existing block if present
+          const existingBlock = container.querySelector(
+            `.result-block[line-start="${lineStart}"]`,
+          );
+          if (existingBlock) {
+            existingBlock.remove();
+          }
+
+          // Add new block
+          container.appendChild(newBlock);
+
+          // Update lowest bottom
+          const blockTop = parseFloat(getComputedStyle(newBlock).top || "0");
+          const blockBottom = blockTop + newBlock.offsetHeight;
+          if (blockBottom > lowestBottom) {
+            lowestBottom = blockBottom;
+          }
+        }
+
+        // Set new requiredPadding
+        const requiredPadding = lowestBottom + window.innerHeight;
+        const currentPadding = parseFloat(
+          getComputedStyle(container).paddingBottom,
+        );
+        if (requiredPadding > currentPadding) {
+          container.style.paddingBottom = `${requiredPadding}px`;
+        }
+      }
+
+      function handleClearBlocks() {
+        // Show empty state
+        const emptyState = document.querySelector(".empty-state");
+        if (emptyState) emptyState.classList.remove("hidden");
+
+        // Clear all blocks and reset padding
+        const container = document.querySelector(".results-container");
+        container.innerHTML = "";
+        container.style.paddingBottom = "100vh";
+      }
+
+      window.addEventListener("message", (event) => {
+        const { command, context } = event.data;
+        console.log("Received message:", command, context);
+
+        switch (command) {
+          case "setBreadcrumb":
+            handleSetBreadcrumb(context);
+            break;
+          case "scrollToPosition":
+            handleScrollToPosition(context);
+            break;
+          case "updateBlocks":
+            handleUpdateBlocks(context);
+            break;
+          case "clearBlocks":
+            handleClearBlocks();
+            break;
+        }
+      });
+    </script>
+  </head>
+  <body>
+    <div class="breadcrumb">
+      <span></span>
+    </div>
+    <div class="empty-state">
+      <h3>No Results Yet</h3>
+      <p>
+        Execute Python code with
+        <code>Ctrl+Enter</code> or <code>Shift+Enter</code> to see results here.
+      </p>
+    </div>
+    <div class="results-container"></div>
+  </body>
+</html>
