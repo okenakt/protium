@@ -60,6 +60,16 @@ export function activate(context: vscode.ExtensionContext) {
     () => executionManager.clearResults(),
   );
 
+  const restartKernelCmd = vscode.commands.registerCommand(
+    "protium.restartKernel",
+    () => executionManager.restartKernel(),
+  );
+
+  const shutdownKernelCmd = vscode.commands.registerCommand(
+    "protium.shutdownKernel",
+    () => executionManager.shutdownKernel(),
+  );
+
   // Register all disposables
   context.subscriptions.push(
     executeAndMoveNextCmd,
@@ -67,6 +77,8 @@ export function activate(context: vscode.ExtensionContext) {
     interruptExecutionCmd,
     connectToExistingKernelCmd,
     clearResultsCmd,
+    restartKernelCmd,
+    shutdownKernelCmd,
     executionManager,
   );
 

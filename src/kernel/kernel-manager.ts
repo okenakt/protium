@@ -1,8 +1,9 @@
-import { Kernel, KernelMessage } from "@jupyterlab/services";
+import { Kernel } from "@jupyterlab/services";
 import * as vscode from "vscode";
 import { getPythonInterpreter } from "../interpreter";
 import { ExecutionResult } from "../types";
-import { DirectKernelProvider } from "./direct";
+import { logError, logInfo } from "../utils";
+import { DirectKernelProvider, ExecutionFuture } from "./direct";
 
 /**
  * KernelManager manages kernel instances and their connections
@@ -50,6 +51,8 @@ export class KernelManager {
       return undefined;
     }
 
+    logInfo(`Starting direct kernel with Python: ${pythonPath}`);
+
     // Use provider to provide kernel connection
     const kernel = await this.provider.provide({ pythonPath });
 
@@ -60,110 +63,19 @@ export class KernelManager {
   }
 
   /**
-   * Handle stream messages (stdout/stderr)
-   * @param msg Stream message from kernel
-   * @param result Execution result to update
-   */
-  private handleStreamMessage(
-    msg: KernelMessage.IStreamMsg,
-    result: ExecutionResult,
-  ): void {
-    if (msg.content.name === "stdout") {
-      result.output = (result.output || "") + msg.content.text;
-    } else if (msg.content.name === "stderr") {
-      result.error = (result.error || "") + msg.content.text;
-    }
-  }
-
-  /**
-   * Handle execute_result or display_data messages
-   * @param msg Data message from kernel
-   * @param result Execution result to update
-   */
-  private handleDataMessage(
-    msg: KernelMessage.IExecuteResultMsg | KernelMessage.IDisplayDataMsg,
-    result: ExecutionResult,
-  ): void {
-    const data = msg.content.data;
-    if (data) {
-      if (!result.mimeData) {
-        result.mimeData = {};
-      }
-      Object.assign(result.mimeData, data);
-
-      // Only add text/plain to output if there's no richer mime type
-      // (e.g., don't show "<Figure size 640x480>" for matplotlib plots)
-      const hasRichOutput =
-        data["image/png"] ||
-        data["image/jpeg"] ||
-        data["image/svg+xml"] ||
-        data["text/html"];
-
-      if (data["text/plain"] && !hasRichOutput) {
-        result.output = (result.output || "") + data["text/plain"];
-      }
-    }
-  }
-
-  /**
-   * Handle error messages
-   * @param msg Error message from kernel
-   * @param result Execution result to update
-   */
-  private handleErrorMessage(
-    msg: KernelMessage.IErrorMsg,
-    result: ExecutionResult,
-  ): void {
-    const errorText =
-      msg.content.traceback?.join("\n") ||
-      msg.content.evalue ||
-      "Unknown error";
-    result.error = (result.error || "") + errorText;
-  }
-
-  /**
-   * Process IOPub messages and accumulate outputs
-   * @param msg IOPub message from kernel
-   * @param result Execution result to update
-   */
-  private processIOPubMessage(
-    msg: KernelMessage.IIOPubMessage,
-    result: ExecutionResult,
-  ): void {
-    const msgType = msg.header.msg_type;
-
-    switch (msgType) {
-      case "stream":
-        this.handleStreamMessage(msg as KernelMessage.IStreamMsg, result);
-        break;
-      case "execute_result":
-        this.handleDataMessage(msg as KernelMessage.IExecuteResultMsg, result);
-        break;
-      case "display_data":
-        this.handleDataMessage(msg as KernelMessage.IDisplayDataMsg, result);
-        break;
-      case "error":
-        this.handleErrorMessage(msg as KernelMessage.IErrorMsg, result);
-        break;
-    }
-  }
-
-  /**
    * Request code execution on kernel (non-blocking)
    * @param kernelId The kernel ID to execute on
    * @param code The code to execute
-   * @param onSuccess Callback for successful execution
-   * @param onError Callback for execution errors
+   * @param onComplete Callback invoked when execution completes (any status)
    */
   requestExecution(
     kernelId: string,
     code: string,
-    onSuccess: (result: ExecutionResult) => void,
-    onError: (error: string) => void,
+    onComplete: (result: ExecutionResult) => void,
   ): void {
     const kernel = this.kernels.get(kernelId);
     if (!kernel) {
-      onError("No kernel available");
+      logError(`Kernel ${kernelId} not found for execution request`);
       return;
     }
 
@@ -173,29 +85,18 @@ export class KernelManager {
       store_history: true,
       user_expressions: {},
       allow_stdin: false,
-    });
-
-    const result: ExecutionResult = {};
-
-    future.onIOPub = (msg: KernelMessage.IIOPubMessage) => {
-      this.processIOPubMessage(msg, result);
-    };
+    }) as ExecutionFuture;
 
     // Handle result asynchronously
     future.done
-      .then((reply) => {
-        if (
-          reply.content.execution_count !== undefined &&
-          reply.content.execution_count !== null
-        ) {
-          result.executionCount = reply.content.execution_count;
-        }
-
-        result.isSucceeded = reply.content.status === "ok";
-        onSuccess(result);
+      .then(() => {
+        onComplete(future.result);
       })
-      .catch((_error) => {
-        onError("Kernel execution failed");
+      .catch((error) => {
+        logError(
+          `Execution rejected on kernel: ${kernelId}, msg_id: ${future.msg.header.msg_id}`,
+          error,
+        );
       });
   }
 
@@ -205,52 +106,64 @@ export class KernelManager {
    */
   async interruptKernel(kernelId: string): Promise<void> {
     const kernel = this.kernels.get(kernelId);
-    if (kernel) {
-      try {
-        await kernel.interrupt();
-      } catch (error) {
-        throw new Error(`Failed to interrupt kernel: ${error}`);
-      }
-    } else {
+    if (!kernel) {
       throw new Error(`Kernel ${kernelId} not found`);
+    }
+
+    await kernel.interrupt();
+  }
+
+  /**
+   * Restart kernel (preserves kernel ID)
+   * @param kernelId Kernel ID to restart
+   */
+  async restartKernel(kernelId: string): Promise<void> {
+    const kernel = this.kernels.get(kernelId);
+    if (!kernel) {
+      throw new Error(`Kernel ${kernelId} not found`);
+    }
+
+    try {
+      logInfo(`Restarting kernel ${kernelId}`);
+      const newKernel = await this.provider.restart(kernelId);
+
+      // Update kernel cache with new connection
+      this.kernels.set(kernelId, newKernel);
+    } catch (error) {
+      throw new Error(`Failed to restart kernel: ${error}`);
     }
   }
 
   /**
-   * Disconnect a kernel and cleanup resources
-   * @param kernelId Kernel ID to disconnect
+   * Shutdown a specific kernel
+   * @param kernelId Kernel ID to shutdown
    */
-  async disconnectKernel(kernelId: string): Promise<void> {
-    // Remove from cache
+  async shutdownKernel(kernelId: string): Promise<void> {
     const kernel = this.kernels.get(kernelId);
-    if (kernel) {
-      try {
-        await kernel.shutdown();
-      } catch {
-        // Ignore kernel shutdown errors
-      }
-      this.kernels.delete(kernelId);
+    if (!kernel) {
+      throw new Error(`Kernel ${kernelId} not found`);
     }
 
-    // Cleanup provider resources
-    try {
-      await this.provider.dispose(kernelId);
-    } catch {
-      // Ignore provider dispose errors
-    }
+    logInfo(`Shutting down kernel ${kernelId}`);
+
+    // Close connection
+    await kernel.shutdown();
+
+    // Kill process and cleanup via provider
+    await this.provider.dispose(kernelId);
+
+    // Remove from cache
+    this.kernels.delete(kernelId);
   }
 
   /**
    * Dispose all kernels and cleanup
    */
   dispose(): void {
-    // Disconnect all kernels
+    // Shutdown all kernels
     const kernelIds = Array.from(this.kernels.keys());
     for (const kernelId of kernelIds) {
-      this.disconnectKernel(kernelId).catch((_error) => {});
+      this.shutdownKernel(kernelId).catch((_error) => {});
     }
-
-    // Cleanup provider
-    this.provider.disposeAll();
   }
 }

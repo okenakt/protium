@@ -50,8 +50,7 @@ export class DisplayManager {
   private async restoreResults(fileUri: string): Promise<void> {
     logInfo(`Restoring results for ${fileUri}`);
 
-    // Clear blocks and set breadcrumb
-    await this.resultPanel.clearBlocks();
+    // Set breadcrumb
     const fileName = getFileNameFromUri(fileUri);
     await this.resultPanel.setBreadcrumb(fileName);
 
@@ -79,9 +78,7 @@ export class DisplayManager {
     // Check if active editor matches the fileUri
     const activeFileUri = getActiveDocumentUri();
     if (activeFileUri !== fileUri) {
-      logInfo(
-        `Active editor does not match ${fileUri}, skipping display update`,
-      );
+      logInfo(`Active editor does not match, skipping display update`);
       return;
     }
 
@@ -109,7 +106,7 @@ export class DisplayManager {
     result: ExecutionResult,
   ): void {
     logInfo(
-      `Displaying result for ${fileUri} at lines ${range.start.line} - ${range.end.line}`,
+      `Displaying result for file: ${fileUri}, range: ${range.start.line} - ${range.end.line}`,
     );
 
     // Load result block template and replace placeholders
@@ -129,7 +126,7 @@ export class DisplayManager {
    */
   displayExecutionLoading(fileUri: string, range: vscode.Range): void {
     logInfo(
-      `Displaying loading animation for ${fileUri} at lines ${range.start.line} - ${range.end.line}`,
+      `Displaying loading animation for file: ${fileUri}, range: ${range.start.line} - ${range.end.line}`,
     );
 
     // Load result block template and replace placeholders
@@ -178,8 +175,13 @@ export class DisplayManager {
     }
 
     // Success with no output
-    if (result.isSucceeded) {
+    if (result.status === "ok") {
       return '<span class="checkmark">✓</span>';
+    }
+
+    // Interrupted
+    if (result.status === "aborted") {
+      return '<span class="error-text">Interrupted</span>';
     }
 
     return "";

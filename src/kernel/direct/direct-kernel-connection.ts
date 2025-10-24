@@ -5,6 +5,7 @@ import {
   DirectKernelConnectionOptions,
   KernelConnectionInfo,
 } from "../../types";
+import { logInfo } from "../../utils";
 import { ExecutionFuture } from "./execution-future";
 import { RawSocket } from "./raw-socket";
 
@@ -17,6 +18,10 @@ const DEFAULT_KERNEL_DISPLAY_NAME = "Python 3";
  * DirectKernelConnection provides ZMQ-based kernel connection bypassing Jupyter server
  */
 export class DirectKernelConnection implements Kernel.IKernelConnection {
+  // ============================================================================
+  // IKernelConnection Interface: Public Signals
+  // ============================================================================
+
   public readonly statusChanged = new Signal<this, Kernel.Status>(this);
   public readonly connectionStatusChanged = new Signal<
     this,
@@ -32,11 +37,19 @@ export class DirectKernelConnection implements Kernel.IKernelConnection {
   public readonly disposed = new Signal<this, void>(this);
   public readonly pendingInput = new Signal<this, boolean>(this);
 
-  public readonly model: Kernel.IModel;
+  // ============================================================================
+  // IKernelConnection Interface: Public Properties
+  // ============================================================================
+
   public readonly id: string;
-  public readonly clientId: string;
-  public readonly username: string;
   public readonly name: string;
+  public readonly model: Kernel.IModel;
+  public readonly username: string;
+  public readonly clientId: string;
+
+  // ============================================================================
+  // Private Properties
+  // ============================================================================
 
   private connectionInfo: KernelConnectionInfo;
   private rawSocket?: RawSocket;
@@ -47,12 +60,43 @@ export class DirectKernelConnection implements Kernel.IKernelConnection {
   private _isDisposed = false;
   private _kernelInfo?: KernelMessage.IInfoReply;
 
+  // ============================================================================
+  // IKernelConnection Interface: Getters
+  // ============================================================================
+
   public get status(): Kernel.Status {
     return this._status;
   }
 
   public get connectionStatus(): Kernel.ConnectionStatus {
     return this._connectionStatus;
+  }
+
+  public get info(): Promise<KernelMessage.IInfoReply> {
+    if (this._kernelInfo) {
+      return Promise.resolve(this._kernelInfo);
+    }
+    return Promise.reject(new Error("Kernel info not available yet"));
+  }
+
+  public get spec(): Promise<any> {
+    return Promise.resolve({
+      name: this.connectionInfo.kernel_name,
+      display_name: DEFAULT_KERNEL_DISPLAY_NAME,
+      language: DEFAULT_KERNEL_LANGUAGE,
+      argv: ["python", "-m", "ipykernel_launcher", "-f", "{connection_file}"],
+      env: {},
+      interrupt_mode: "signal",
+      metadata: {},
+    });
+  }
+
+  public get handleComms(): boolean {
+    return this._handleComms;
+  }
+
+  public get hasPendingInput(): boolean {
+    return this._hasPendingInput;
   }
 
   public get serverSettings(): ServerConnection.ISettings {
@@ -72,60 +116,6 @@ export class DirectKernelConnection implements Kernel.IKernelConnection {
     };
   }
 
-  public get info(): Promise<KernelMessage.IInfoReply> {
-    // Return cached kernel info if available, otherwise return default
-    if (this._kernelInfo) {
-      return Promise.resolve(this._kernelInfo);
-    }
-
-    // Return minimal default info (will be updated when kernel responds)
-    return Promise.resolve(this.getDefaultKernelInfo());
-  }
-
-  public get spec(): Promise<any> {
-    return Promise.resolve({
-      name: this.connectionInfo.kernel_name,
-      display_name: DEFAULT_KERNEL_DISPLAY_NAME,
-      language: DEFAULT_KERNEL_LANGUAGE,
-      argv: ["python", "-m", "ipykernel_launcher", "-f", "{connection_file}"],
-      env: {},
-      interrupt_mode: "signal",
-      metadata: {},
-    });
-  }
-
-  /**
-   * Get default kernel info (used before actual kernel info is received)
-   * @returns Default kernel info reply
-   */
-  private getDefaultKernelInfo(): KernelMessage.IInfoReply {
-    return {
-      status: "ok",
-      protocol_version: JUPYTER_PROTOCOL_VERSION,
-      implementation: "ipython",
-      implementation_version: "unknown",
-      language_info: {
-        name: DEFAULT_KERNEL_LANGUAGE,
-        version: "unknown",
-        mimetype: "text/x-python",
-        file_extension: ".py",
-        pygments_lexer: "ipython3",
-        codemirror_mode: { name: "ipython", version: 3 },
-        nbconvert_exporter: "python",
-      },
-      banner: `${DEFAULT_KERNEL_DISPLAY_NAME} [Protium Kernel]`,
-      help_links: [],
-    };
-  }
-
-  public get handleComms(): boolean {
-    return this._handleComms;
-  }
-
-  public get hasPendingInput(): boolean {
-    return this._hasPendingInput;
-  }
-
   public get isDisposed(): boolean {
     return this._isDisposed;
   }
@@ -138,6 +128,10 @@ export class DirectKernelConnection implements Kernel.IKernelConnection {
     return null;
   }
 
+  // ============================================================================
+  // Constructor
+  // ============================================================================
+
   constructor(options: DirectKernelConnectionOptions) {
     this.model = options.model;
     this.id = options.model.id;
@@ -146,8 +140,61 @@ export class DirectKernelConnection implements Kernel.IKernelConnection {
     this.name = options.model.name;
     this.connectionInfo = options.connectionInfo;
 
-    // Create our RawSocket connection
-    this.createRawSocket();
+    logInfo(`Creating DirectKernelConnection for kernel: ${this.id}`);
+
+    // Create RawSocket connection with event handlers
+    this.rawSocket = new RawSocket(this.connectionInfo, {
+      onOpen: () => {
+        this._connectionStatus = "connected";
+        this._status = "idle";
+        this.connectionStatusChanged.emit("connected");
+        this.statusChanged.emit("idle");
+      },
+      onClose: () => {
+        this._connectionStatus = "disconnected";
+        this._status = "dead";
+        this.connectionStatusChanged.emit("disconnected");
+        this.statusChanged.emit("dead");
+      },
+      onError: () => {
+        this._connectionStatus = "disconnected";
+        this.connectionStatusChanged.emit("disconnected");
+      },
+      onMessage: (event) => {
+        try {
+          // Process the message and emit appropriate signals
+          this.handleMessage(event);
+        } catch {
+          // Ignore message handling errors
+        }
+      },
+    });
+  }
+
+  // ============================================================================
+  // IKernelConnection Interface: Request Methods
+  // ============================================================================
+
+  public requestKernelInfo(): Promise<KernelMessage.IInfoReplyMsg | undefined> {
+    return Promise.resolve(undefined);
+  }
+
+  public requestComplete(
+    _content: KernelMessage.ICompleteRequestMsg["content"],
+  ): Promise<KernelMessage.ICompleteReplyMsg> {
+    throw new Error("Not implemented");
+  }
+
+  public requestInspect(
+    _content: KernelMessage.IInspectRequestMsg["content"],
+  ): Promise<KernelMessage.IInspectReplyMsg> {
+    throw new Error("Not implemented");
+  }
+
+  public requestHistory(
+    _content: KernelMessage.IHistoryRequestMsg["content"],
+  ): Promise<KernelMessage.IHistoryReplyMsg> {
+    throw new Error("Not implemented");
   }
 
   /**
@@ -188,26 +235,20 @@ export class DirectKernelConnection implements Kernel.IKernelConnection {
     // Send the message
     if (this.rawSocket) {
       this.rawSocket.send(JSON.stringify(msg));
+      logInfo(
+        `Execute request sent to kernel: ${this.id}, msg_id: ${msg.header.msg_id}`,
+      );
     }
 
     return future;
   }
 
-  public requestInspect(
-    _content: KernelMessage.IInspectRequestMsg["content"],
-  ): Promise<KernelMessage.IInspectReplyMsg> {
-    throw new Error("Not implemented");
-  }
-
-  public requestComplete(
-    _content: KernelMessage.ICompleteRequestMsg["content"],
-  ): Promise<KernelMessage.ICompleteReplyMsg> {
-    throw new Error("Not implemented");
-  }
-
-  public requestHistory(
-    _content: KernelMessage.IHistoryRequestMsg["content"],
-  ): Promise<KernelMessage.IHistoryReplyMsg> {
+  public requestDebug(
+    _content: KernelMessage.IDebugRequestMsg["content"],
+  ): Kernel.IFuture<
+    KernelMessage.IDebugRequestMsg,
+    KernelMessage.IDebugReplyMsg
+  > {
     throw new Error("Not implemented");
   }
 
@@ -223,82 +264,9 @@ export class DirectKernelConnection implements Kernel.IKernelConnection {
     throw new Error("Not implemented");
   }
 
-  public requestKernelInfo(): Promise<KernelMessage.IInfoReplyMsg | undefined> {
-    // For now, return undefined as the signature expects
-    return Promise.resolve(undefined);
-  }
-
-  public async interrupt(): Promise<void> {
-    // Implementation for kernel interrupt
-  }
-
-  public async restart(): Promise<void> {
-    // Implementation for kernel restart
-  }
-
-  public async shutdown(): Promise<void> {
-    this._status = "dead";
-    this.statusChanged.emit("dead");
-    this.dispose();
-  }
-
-  public clone(
-    _options?: Kernel.IKernelConnection.IOptions,
-  ): Kernel.IKernelConnection {
-    throw new Error("Not implemented");
-  }
-
-  public registerCommTarget(
-    _targetName: string,
-    _callback: (
-      _comm: Kernel.IComm,
-      _msg: KernelMessage.ICommOpenMsg,
-    ) => void | PromiseLike<void>,
-  ): void {
-    // Not implemented
-  }
-
-  public removeCommTarget(
-    _targetName: string,
-    _callback: (
-      _comm: Kernel.IComm,
-      _msg: KernelMessage.ICommOpenMsg,
-    ) => void | PromiseLike<void>,
-  ): void {
-    // Not implemented
-  }
-
-  public createComm(
-    _targetName: string,
-    _commId?: string,
-    _data?: any,
-    _metadata?: any,
-    _buffers?: (ArrayBuffer | ArrayBufferView)[],
-  ): Kernel.IComm {
-    throw new Error("Not implemented");
-  }
-
-  public hasComm(_commId: string): boolean {
-    return false;
-  }
-
-  public registerMessageHook(
-    _msgId: string,
-    _hook: (
-      _msg: KernelMessage.IIOPubMessage,
-    ) => boolean | PromiseLike<boolean>,
-  ): void {
-    // Not implemented
-  }
-
-  public removeMessageHook(
-    _msgId: string,
-    _hook: (
-      _msg: KernelMessage.IIOPubMessage,
-    ) => boolean | PromiseLike<boolean>,
-  ): void {
-    // Not implemented
-  }
+  // ============================================================================
+  // IKernelConnection Interface: Message Methods
+  // ============================================================================
 
   public sendShellMessage<T extends KernelMessage.ShellMessageType>(
     _msg: KernelMessage.IShellMessage<T>,
@@ -326,21 +294,147 @@ export class DirectKernelConnection implements Kernel.IKernelConnection {
     _content: KernelMessage.IInputReplyMsg["content"],
     _parent_header: KernelMessage.IMessage["header"],
   ): void {
-    // Not implemented
-  }
-
-  public async reconnect(): Promise<void> {
-    // Not implemented
-  }
-
-  public requestDebug(
-    _content: KernelMessage.IDebugRequestMsg["content"],
-  ): Kernel.IFuture<
-    KernelMessage.IDebugRequestMsg,
-    KernelMessage.IDebugReplyMsg
-  > {
     throw new Error("Not implemented");
   }
+
+  // ============================================================================
+  // IKernelConnection Interface: Lifecycle Methods
+  // ============================================================================
+
+  public async reconnect(): Promise<void> {
+    throw new Error("Not implemented");
+  }
+
+  public async interrupt(): Promise<void> {
+    if (this._isDisposed) {
+      throw new Error("Kernel connection is disposed");
+    }
+
+    // Send interrupt_request via control channel
+    const msg: KernelMessage.IMessage = {
+      header: {
+        msg_id: uuidv4(),
+        msg_type: "interrupt_request",
+        username: this.username,
+        session: this.clientId,
+        date: new Date().toISOString(),
+        version: JUPYTER_PROTOCOL_VERSION,
+      },
+      parent_header: {},
+      metadata: {},
+      content: {},
+      channel: "control",
+      buffers: [],
+    };
+
+    if (this.rawSocket) {
+      this.rawSocket.send(JSON.stringify(msg));
+      logInfo(`Interrupt request sent to kernel: ${this.id}`);
+    }
+  }
+
+  public async restart(): Promise<void> {
+    throw new Error("Not implemented");
+  }
+
+  public async shutdown(): Promise<void> {
+    if (this._isDisposed) {
+      return;
+    }
+
+    logInfo(`Shutting down DirectKernelConnection for kernel: ${this.id}`);
+
+    this._status = "dead";
+    this.statusChanged.emit("dead");
+    this.dispose();
+  }
+
+  public dispose(): void {
+    if (this._isDisposed) {
+      return;
+    }
+
+    this._isDisposed = true;
+
+    if (this.rawSocket) {
+      this.rawSocket.close();
+      this.rawSocket = undefined;
+    }
+
+    this.disposed.emit();
+
+    logInfo(`Disposed DirectKernelConnection for kernel: ${this.id}`);
+  }
+
+  public clone(
+    _options?: Kernel.IKernelConnection.IOptions,
+  ): Kernel.IKernelConnection {
+    throw new Error("Not implemented");
+  }
+
+  public registerMessageHook(
+    _msgId: string,
+    _hook: (
+      _msg: KernelMessage.IIOPubMessage,
+    ) => boolean | PromiseLike<boolean>,
+  ): void {
+    throw new Error("Not implemented");
+  }
+
+  public removeMessageHook(
+    _msgId: string,
+    _hook: (
+      _msg: KernelMessage.IIOPubMessage,
+    ) => boolean | PromiseLike<boolean>,
+  ): void {
+    throw new Error("Not implemented");
+  }
+
+  public removeInputGuard(): void {
+    throw new Error("Not implemented");
+  }
+
+  // ============================================================================
+  // IKernelConnection Interface: Comm Methods
+  // ============================================================================
+
+  public createComm(
+    _targetName: string,
+    _commId?: string,
+    _data?: any,
+    _metadata?: any,
+    _buffers?: (ArrayBuffer | ArrayBufferView)[],
+  ): Kernel.IComm {
+    throw new Error("Not implemented");
+  }
+
+  public hasComm(_commId: string): boolean {
+    throw new Error("Not implemented");
+  }
+
+  public registerCommTarget(
+    _targetName: string,
+    _callback: (
+      _comm: Kernel.IComm,
+      _msg: KernelMessage.ICommOpenMsg,
+    ) => void | PromiseLike<void>,
+  ): void {
+    throw new Error("Not implemented");
+  }
+
+  public removeCommTarget(
+    _targetName: string,
+    _callback: (
+      _comm: Kernel.IComm,
+      _msg: KernelMessage.ICommOpenMsg,
+    ) => void | PromiseLike<void>,
+  ): void {
+    throw new Error("Not implemented");
+  }
+
+  // ============================================================================
+  // IKernelConnection Interface: Subshell Methods
+  // ============================================================================
 
   public requestCreateSubshell(_content: any): any {
     throw new Error("Not implemented");
@@ -350,7 +444,7 @@ export class DirectKernelConnection implements Kernel.IKernelConnection {
     throw new Error("Not implemented");
   }
 
-  public requestListSubshells(_content: any): any {
+  public requestListSubshell(_content: any): any {
     throw new Error("Not implemented");
   }
 
@@ -358,47 +452,18 @@ export class DirectKernelConnection implements Kernel.IKernelConnection {
     throw new Error("Not implemented");
   }
 
-  public requestListSubshell(_content: any): any {
+  public requestListSubshells(_content: any): any {
     throw new Error("Not implemented");
   }
 
-  public removeInputGuard(): void {
-    // Not implemented
-  }
+  // ============================================================================
+  // Private Helper Methods
+  // ============================================================================
 
-  private createRawSocket(): void {
-    // Create our RawSocket with event handlers
-    this.rawSocket = new RawSocket(this.connectionInfo, {
-      onopen: () => {
-        this._connectionStatus = "connected";
-        this._status = "idle";
-        this.connectionStatusChanged.emit("connected");
-        this.statusChanged.emit("idle");
-
-        // Request kernel info to complete initialization
-        this.initializeKernel();
-      },
-      onclose: () => {
-        this._connectionStatus = "disconnected";
-        this._status = "dead";
-        this.connectionStatusChanged.emit("disconnected");
-        this.statusChanged.emit("dead");
-      },
-      onerror: () => {
-        this._connectionStatus = "disconnected";
-        this.connectionStatusChanged.emit("disconnected");
-      },
-      onmessage: (event) => {
-        try {
-          // Process the message and emit appropriate signals
-          this.handleMessage(event);
-        } catch {
-          // Ignore message handling errors
-        }
-      },
-    });
-  }
-
+  /**
+   * Handle incoming Jupyter messages
+   * @param event Message event from socket
+   */
   private handleMessage(event: MessageEvent): void {
     // Parse and handle the incoming Jupyter message
     try {
@@ -413,6 +478,11 @@ export class DirectKernelConnection implements Kernel.IKernelConnection {
           break;
         case "execute_reply":
           this.handleExecuteReply(message);
+          break;
+        case "interrupt_reply":
+          logInfo(
+            `Interrupt reply received, status: "${message.content?.status}", kernel: ${this.id}`,
+          );
           break;
         case "stream":
         case "display_data":
@@ -488,31 +558,5 @@ export class DirectKernelConnection implements Kernel.IKernelConnection {
     if (message.content.status === "ok") {
       this._kernelInfo = message.content;
     }
-  }
-
-  private async initializeKernel(): Promise<void> {
-    try {
-      await this.requestKernelInfo();
-    } catch {
-      // Ignore initialization errors
-    }
-  }
-
-  /**
-   * Dispose connection and cleanup resources
-   */
-  public dispose(): void {
-    if (this._isDisposed) {
-      return;
-    }
-
-    this._isDisposed = true;
-
-    if (this.rawSocket) {
-      this.rawSocket.close();
-      this.rawSocket = undefined;
-    }
-
-    this.disposed.emit();
   }
 }

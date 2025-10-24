@@ -39,7 +39,6 @@ export class ExecutionManager {
   async prepareExecution(fileUri: string): Promise<string | undefined> {
     const existingKernelId = this.sessions.get(fileUri);
     if (existingKernelId) {
-      logInfo(`Using existing kernel for file: ${fileUri}`);
       return existingKernelId;
     }
 
@@ -84,9 +83,6 @@ export class ExecutionManager {
         editor.selection.active,
       );
     }
-    logInfo(
-      `Executing code range: ${codeRange.start.line} - ${codeRange.end.line}`,
-    );
 
     const code = editor.document.getText(codeRange);
 
@@ -95,6 +91,10 @@ export class ExecutionManager {
       vscode.window.showWarningMessage("No code to execute");
       return { editor, codeRange };
     }
+
+    logInfo(
+      `Executing code lines from ${codeRange.start.line} to ${codeRange.end.line}`,
+    );
 
     // Get or create kernel for this file
     const kernelId = await this.prepareExecution(fileUri);
@@ -108,16 +108,10 @@ export class ExecutionManager {
     this.displayManager.displayExecutionLoading(fileUri, codeRange);
 
     // Execute code on kernel
-    this.kernelManager.requestExecution(
-      kernelId,
-      code,
-      (result) => {
-        this.displayManager.displayResult(fileUri, codeRange, result);
-      },
-      (error) => {
-        vscode.window.showErrorMessage(error);
-      },
-    );
+    this.kernelManager.requestExecution(kernelId, code, (result) => {
+      // Display result
+      this.displayManager.displayResult(fileUri, codeRange, result);
+    });
 
     return { editor, codeRange };
   }
@@ -142,7 +136,7 @@ export class ExecutionManager {
         const newPosition = new vscode.Position(nextLine, 0);
         editor.selection = new vscode.Selection(newPosition, newPosition);
         editor.revealRange(new vscode.Range(newPosition, newPosition));
-        logInfo(`Moved cursor to line: ${nextLine}`);
+        logInfo(`Moved cursor to line ${nextLine}`);
       }
     }
   }
@@ -163,9 +157,7 @@ export class ExecutionManager {
     const activeKernels = this.kernelManager.getActiveKernels();
 
     if (activeKernels.length === 0) {
-      vscode.window.showWarningMessage(
-        "No active kernels available. Please execute code first to start a kernel.",
-      );
+      vscode.window.showWarningMessage("No active kernels");
       return;
     }
 
@@ -213,6 +205,7 @@ export class ExecutionManager {
 
     // Associate this file with the selected kernel
     this.sessions.set(fileUri, selected.kernelId);
+    logInfo(`Connected file to kernel ${selected.kernelId}`);
   }
 
   /**
@@ -238,6 +231,68 @@ export class ExecutionManager {
       vscode.window.showInformationMessage("Kernel interrupted");
     } catch (error) {
       vscode.window.showErrorMessage(`Failed to interrupt: ${error}`);
+    }
+  }
+
+  /**
+   * Restart kernel for the current file
+   */
+  async restartKernel(): Promise<void> {
+    const editor = getActivePythonEditor();
+    if (!editor) {
+      vscode.window.showErrorMessage("No active Python editor");
+      return;
+    }
+
+    const fileUri = editor.document.uri.toString();
+    const kernelId = this.sessions.get(fileUri);
+
+    if (!kernelId) {
+      vscode.window.showWarningMessage("No kernel running for this file");
+      return;
+    }
+
+    try {
+      await this.kernelManager.restartKernel(kernelId);
+      vscode.window.showInformationMessage("Kernel restarted");
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to restart kernel: ${error}`);
+    }
+  }
+
+  /**
+   * Shutdown kernel for the current file
+   */
+  async shutdownKernel(): Promise<void> {
+    const editor = getActivePythonEditor();
+    if (!editor) {
+      vscode.window.showErrorMessage("No active Python editor");
+      return;
+    }
+
+    const fileUri = editor.document.uri.toString();
+    const kernelId = this.sessions.get(fileUri);
+
+    if (!kernelId) {
+      vscode.window.showWarningMessage("No kernel running for this file");
+      return;
+    }
+
+    try {
+      await this.kernelManager.shutdownKernel(kernelId);
+
+      // Remove all sessions associated with this kernel
+      const sessionEntries = Array.from(this.sessions.entries());
+      for (const [uri, id] of sessionEntries) {
+        if (id === kernelId) {
+          this.displayManager.clearResults(uri);
+          this.sessions.delete(uri);
+        }
+      }
+
+      vscode.window.showInformationMessage("Kernel shutdown");
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to shutdown kernel: ${error}`);
     }
   }
 

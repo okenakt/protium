@@ -33,8 +33,18 @@ export interface KernelProvideOptions {
  * Abstracts kernel connection establishment
  */
 export interface IKernelProvider {
-  provide(_options: KernelProvideOptions): Promise<Kernel.IKernelConnection>;
-  dispose(_kernelId: string): Promise<void>;
+  provide(options: KernelProvideOptions): Promise<Kernel.IKernelConnection>;
+  restart(kernelId: string): Promise<Kernel.IKernelConnection>;
+  dispose(kernelId: string): Promise<void>;
+}
+
+/**
+ * Metadata for managing direct kernel lifecycle
+ */
+export interface DirectKernelMetadata {
+  process: any;
+  connectionFilePath: string;
+  pythonPath: string;
 }
 
 /**

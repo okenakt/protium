@@ -10,10 +10,12 @@ import {
   launchIpykernel,
 } from "../../interpreter";
 import {
+  DirectKernelMetadata,
   IKernelProvider,
   KernelConnectionInfo,
   KernelProvideOptions,
 } from "../../types/kernel";
+import { logDebug, logError, logInfo, logWarn } from "../../utils";
 import { findConsecutiveAvailablePorts } from "../../utils/port-finder";
 import { DirectKernelConnection } from "./direct-kernel-connection";
 
@@ -27,8 +29,7 @@ const USERNAME = "protium";
  */
 export class DirectKernelProvider implements IKernelProvider {
   private tempDir: string;
-  private kernelProcesses: Map<string, any> = new Map(); // kernelId -> process info
-  private connectionFiles: Map<string, string> = new Map(); // kernelId -> connection file path
+  private kernelMetadata: Map<string, DirectKernelMetadata> = new Map();
 
   constructor() {
     this.tempDir = path.join(os.tmpdir(), "protium-kernels");
@@ -123,6 +124,7 @@ export class DirectKernelProvider implements IKernelProvider {
     };
 
     fs.writeFileSync(filePath, JSON.stringify(connectionInfo, null, 2));
+    logInfo(`Generated connection file at ${filePath}`);
 
     return connectionInfo;
   }
@@ -140,7 +142,10 @@ export class DirectKernelProvider implements IKernelProvider {
     let attempts = 0;
 
     while (attempts < maxAttempts) {
+      logDebug(`Waiting for kernel connection... Attempt ${attempts + 1}`);
+
       if (kernelConnection.connectionStatus === "connected") {
+        logInfo(`Kernel connection established after ${attempts + 1} attempts`);
         return;
       }
       await new Promise((resolve) =>
@@ -149,40 +154,35 @@ export class DirectKernelProvider implements IKernelProvider {
       attempts++;
     }
 
+    logError(
+      `Connection timeout after ${maxAttempts} attempts (${CONNECTION_TIMEOUT_MS}ms)`,
+    );
     throw new Error(`Connection timeout after ${CONNECTION_TIMEOUT_MS}ms`);
   }
 
   /**
-   * Provide a kernel connection by starting a new local Python process
-   * @param options Kernel provision options
+   * Launch kernel process and create connection
+   * @param kernelId Kernel ID
+   * @param pythonPath Python interpreter path
+   * @param connectionFilePath Connection file path
+   * @param connectionInfo Kernel connection info
    * @returns Kernel connection
    */
-  async provide(
-    options: KernelProvideOptions,
+  private async launchKernelAndConnect(
+    kernelId: string,
+    pythonPath: string,
+    connectionFilePath: string,
+    connectionInfo: KernelConnectionInfo,
   ): Promise<Kernel.IKernelConnection> {
-    const pythonPath = options.pythonPath;
-    if (!pythonPath) {
-      throw new Error("Python interpreter path is not specified");
-    }
-
     // Ensure ipykernel is installed
     const ipykernelReady = await this.ensureIpykernelInstalled(pythonPath);
     if (!ipykernelReady) {
       throw new Error("ipykernel is not available");
     }
 
-    // Generate kernel ID and connection info
-    const kernelId = uuidv4();
-    const filePath = path.join(this.tempDir, `kernel-${kernelId}.json`);
-    const connectionInfo = await this.generateConnectionInfo(
-      kernelId,
-      filePath,
-    );
-
-    this.connectionFiles.set(kernelId, filePath);
-
     // Launch kernel process
-    const processInfo = launchIpykernel(pythonPath, filePath, {
+    logInfo(`Launching kernel process for kernel: ${kernelId}`);
+    const process = launchIpykernel(pythonPath, connectionFilePath, {
       onError: (error) => {
         vscode.window.showErrorMessage(
           `Kernel process failed: ${error.message}`,
@@ -190,15 +190,18 @@ export class DirectKernelProvider implements IKernelProvider {
       },
       onExit: () => {
         // Cleanup on exit
-        this.kernelProcesses.delete(kernelId);
-        this.cleanupConnectionFile(kernelId);
+        this.dispose(kernelId).catch(() => {});
       },
       onStdout: () => {},
       onStderr: () => {},
     });
 
-    // Store process info
-    this.kernelProcesses.set(kernelId, processInfo);
+    // Store kernel metadata
+    this.kernelMetadata.set(kernelId, {
+      process,
+      connectionFilePath,
+      pythonPath,
+    });
 
     // Create kernel connection
     const kernelModel: Kernel.IModel = {
@@ -220,59 +223,95 @@ export class DirectKernelProvider implements IKernelProvider {
   }
 
   /**
+   * Provide a kernel connection by starting a new local Python process
+   * @param options Kernel provision options
+   * @returns Kernel connection
+   */
+  async provide(
+    options: KernelProvideOptions,
+  ): Promise<Kernel.IKernelConnection> {
+    const pythonPath = options.pythonPath;
+    if (!pythonPath) {
+      throw new Error("Python interpreter path is not specified");
+    }
+
+    // Generate kernel ID and connection info
+    const kernelId = uuidv4();
+    const filePath = path.join(this.tempDir, `kernel-${kernelId}.json`);
+    const connectionInfo = await this.generateConnectionInfo(
+      kernelId,
+      filePath,
+    );
+
+    return this.launchKernelAndConnect(
+      kernelId,
+      pythonPath,
+      filePath,
+      connectionInfo,
+    );
+  }
+
+  /**
+   * Restart kernel with same kernel ID
+   * @param kernelId Kernel ID to restart
+   * @returns New kernel connection with same ID
+   */
+  async restart(kernelId: string): Promise<Kernel.IKernelConnection> {
+    // Get stored kernel metadata before disposal
+    const metadata = this.kernelMetadata.get(kernelId);
+    if (!metadata) {
+      throw new Error(`Kernel metadata for ${kernelId} not found`);
+    }
+
+    const pythonPath = metadata.pythonPath;
+
+    // Dispose old kernel resources
+    await this.dispose(kernelId);
+
+    // Generate new connection file with same kernel ID
+    const filePath = path.join(this.tempDir, `kernel-${kernelId}.json`);
+    const connectionInfo = await this.generateConnectionInfo(
+      kernelId,
+      filePath,
+    );
+
+    return this.launchKernelAndConnect(
+      kernelId,
+      pythonPath,
+      filePath,
+      connectionInfo,
+    );
+  }
+
+  /**
    * Dispose a kernel and cleanup resources
    * @param kernelId Kernel ID to dispose
    */
   async dispose(kernelId: string): Promise<void> {
-    // Get process info
-    const processInfo = this.kernelProcesses.get(kernelId);
-    if (processInfo) {
-      // Kill the process
-      try {
-        processInfo.kill();
-      } catch {
-        // Ignore kill errors
-      }
+    const metadata = this.kernelMetadata.get(kernelId);
+    if (!metadata) {
+      return;
+    }
 
-      this.kernelProcesses.delete(kernelId);
+    // Kill the process
+    try {
+      metadata.process.kill();
+      logInfo(`Kernel process ${kernelId} terminated`);
+    } catch (error) {
+      logWarn(`Failed to kill kernel process ${kernelId}`, error);
     }
 
     // Cleanup connection file
-    this.cleanupConnectionFile(kernelId);
-  }
-
-  /**
-   * Cleanup connection file for a kernel
-   * @param kernelId Kernel ID
-   */
-  private cleanupConnectionFile(kernelId: string): void {
-    const connectionFile = this.connectionFiles.get(kernelId);
-    if (connectionFile && fs.existsSync(connectionFile)) {
+    if (fs.existsSync(metadata.connectionFilePath)) {
       try {
-        fs.unlinkSync(connectionFile);
+        fs.unlinkSync(metadata.connectionFilePath);
       } catch {
         // Ignore cleanup errors
       }
     }
-    this.connectionFiles.delete(kernelId);
-  }
 
-  /**
-   * Cleanup all resources
-   */
-  disposeAll(): void {
-    // Kill all kernel processes
-    for (const [kernelId] of this.kernelProcesses) {
-      this.dispose(kernelId).catch(() => {});
-    }
-
-    // Cleanup temp directory
-    try {
-      if (fs.existsSync(this.tempDir)) {
-        fs.rmSync(this.tempDir, { recursive: true, force: true });
-      }
-    } catch {
-      // Ignore cleanup errors
-    }
+    // Remove metadata
+    this.kernelMetadata.delete(kernelId);
+    logInfo(`Disposed kernel process ${kernelId}`);
   }
 }

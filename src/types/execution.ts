@@ -1,4 +1,9 @@
 /**
+ * Execution status from kernel (Jupyter Protocol)
+ */
+export type ExecutionStatus = "ok" | "error" | "aborted";
+
+/**
  * Execution result from kernel
  */
 export interface ExecutionResult {
@@ -10,6 +15,6 @@ export interface ExecutionResult {
   executionCount?: number;
   /** Rich output data (images, HTML, etc.) keyed by MIME type */
   mimeData?: { [mimeType: string]: any };
-  /** Whether execution completed without errors */
-  isSucceeded?: boolean;
+  /** Execution status: ok | error | aborted (follows Jupyter Protocol) */
+  status: ExecutionStatus;
 }

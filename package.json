@@ -1,7 +1,7 @@
 {
   "name": "protium",
   "displayName": "Protium",
-  "description": "Interactive Python REPL for VS Code with flexible execution in your workflow",
+  "description": "Interactive Python environment for VS Code with flexible execution in your workflow",
   "version": "0.0.1",
   "icon": "icon.png",
   "engines": {
@@ -40,6 +40,16 @@
       {
         "command": "protium.clearResults",
         "title": "Clear Results",
+        "category": "Protium"
+      },
+      {
+        "command": "protium.restartKernel",
+        "title": "Restart Kernel",
+        "category": "Protium"
+      },
+      {
+        "command": "protium.shutdownKernel",
+        "title": "Shutdown Kernel",
         "category": "Protium"
       }
     ],
