@@ -88,7 +88,7 @@ export class ResultPanel {
     const lineHeight = getLineHeight();
     logInfo(`Generate base HTML with lineHeight: ${lineHeight}`);
 
-    const baseHTML = loadTemplate("templates/display/result-panel.html", {
+    const baseHTML = loadTemplate("templates/result-panel/result-panel.html", {
       lineHeight: lineHeight,
     });
     this.panel.webview.html = baseHTML;

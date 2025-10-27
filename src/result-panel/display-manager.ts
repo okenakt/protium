@@ -110,7 +110,7 @@ export class DisplayManager {
     );
 
     // Load result block template and replace placeholders
-    const block = loadTemplate("templates/display/result-block.html", {
+    const block = loadTemplate("templates/result-panel/result-block.html", {
       lineStart: range.start.line.toString(),
       lineEnd: range.end.line.toString(),
       content: this.formatResultAsHtml(result),
@@ -130,7 +130,7 @@ export class DisplayManager {
     );
 
     // Load result block template and replace placeholders
-    const block = loadTemplate("templates/display/loading-block.html", {
+    const block = loadTemplate("templates/result-panel/loading-block.html", {
       lineStart: range.start.line.toString(),
       lineEnd: range.end.line.toString(),
     });
@@ -179,9 +179,9 @@ export class DisplayManager {
       return '<span class="checkmark">✓</span>';
     }
 
-    // Interrupted
+    // Aborted
     if (result.status === "aborted") {
-      return '<span class="error-text">Interrupted</span>';
+      return '<span class="error-text">Aborted</span>';
     }
 
     return "";

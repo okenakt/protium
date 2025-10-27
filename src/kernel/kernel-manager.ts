@@ -11,21 +11,41 @@ import { DirectKernelProvider, ExecutionFuture } from "./direct";
 export class KernelManager {
   private provider: DirectKernelProvider;
   private kernels: Map<string, Kernel.IKernelConnection> = new Map();
+  private onStatusChangeCallback?: () => void;
 
   constructor() {
     this.provider = new DirectKernelProvider();
   }
 
   /**
+   * Set callback for status changes
+   */
+  public setOnStatusChange(callback: () => void): void {
+    this.onStatusChangeCallback = callback;
+  }
+
+  /**
    * Get all active kernels
    * @returns Array of kernel info objects
    */
-  public getActiveKernels(): Array<{ id: string; name: string }> {
-    const kernelList: Array<{ id: string; name: string }> = [];
+  public getActiveKernels(): Array<{
+    id: string;
+    name: string;
+    status: Kernel.Status;
+    execCount: number;
+  }> {
+    const kernelList: Array<{
+      id: string;
+      name: string;
+      status: Kernel.Status;
+      execCount: number;
+    }> = [];
     for (const [id, kernel] of this.kernels.entries()) {
       kernelList.push({
         id,
         name: kernel.name || `Kernel ${id.substring(0, 8)}`,
+        status: kernel.status,
+        execCount: (kernel as any).executionCount || 0,
       });
     }
     return kernelList;
@@ -58,6 +78,12 @@ export class KernelManager {
 
     // Cache the kernel
     this.kernels.set(kernel.id, kernel);
+
+    // Listen to status changes
+    kernel.statusChanged.connect(() => {
+      logInfo(`Kernel ${kernel.id} status changed to: ${kernel.status}`);
+      this.onStatusChangeCallback?.();
+    });
 
     return kernel;
   }
@@ -129,6 +155,12 @@ export class KernelManager {
 
       // Update kernel cache with new connection
       this.kernels.set(kernelId, newKernel);
+
+      // Listen to status changes on new kernel
+      newKernel.statusChanged.connect(() => {
+        logInfo(`Kernel ${newKernel.id} status changed to: ${newKernel.status}`);
+        this.onStatusChangeCallback?.();
+      });
     } catch (error) {
       throw new Error(`Failed to restart kernel: ${error}`);
     }

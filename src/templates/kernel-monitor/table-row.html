@@ -1,0 +1,37 @@
+<tr data-kernel-id="{{kernelId}}">
+  <td>{{kernelName}}</td>
+  <td class="kernel-id" title="{{kernelId}}">{{kernelIdShort}}...</td>
+  <td>
+    <div class="status {{statusClass}}">
+      <span class="status-indicator"></span>
+      {{statusText}}
+    </div>
+  </td>
+  <td class="exec-count">{{execCount}}</td>
+  <td class="files-cell">{{filesDisplay}}</td>
+  <td>
+    <div class="action-buttons">
+      <button
+        class="action-btn interrupt-btn"
+        data-kernel-id="{{kernelId}}"
+        title="Interrupt Kernel"
+      >
+        <i class="codicon codicon-debug-pause"></i>
+      </button>
+      <button
+        class="action-btn restart-btn"
+        data-kernel-id="{{kernelId}}"
+        title="Restart Kernel"
+      >
+        <i class="codicon codicon-debug-restart"></i>
+      </button>
+      <button
+        class="action-btn shutdown-btn"
+        data-kernel-id="{{kernelId}}"
+        title="Shutdown Kernel"
+      >
+        <i class="codicon codicon-debug-stop"></i>
+      </button>
+    </div>
+  </td>
+</tr>

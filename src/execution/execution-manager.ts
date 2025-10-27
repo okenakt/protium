@@ -1,6 +1,8 @@
 import * as vscode from "vscode";
-import { DisplayManager } from "../display";
 import { KernelManager } from "../kernel";
+import { KernelMonitor } from "../kernel-monitor";
+import { DisplayManager } from "../result-panel";
+import { KernelExecInfo } from "../types/kernel";
 import { logInfo } from "../utils";
 import {
   getActivePythonEditor,
@@ -16,12 +18,18 @@ export class ExecutionManager {
   private blockDetector: BlockDetector;
   private kernelManager: KernelManager;
   private displayManager: DisplayManager;
+  private kernelMonitor: KernelMonitor | undefined;
   private sessions: Map<string, string> = new Map();
 
   constructor() {
     this.blockDetector = new BlockDetector();
     this.displayManager = new DisplayManager();
     this.kernelManager = new KernelManager();
+
+    // Set up kernel status change callback
+    this.kernelManager.setOnStatusChange(() => {
+      this.updateKernelMonitor();
+    });
 
     // Listen to active editor changes to update display
     vscode.window.onDidChangeActiveTextEditor((editor) => {
@@ -103,6 +111,9 @@ export class ExecutionManager {
       vscode.window.showErrorMessage(error);
       return undefined;
     }
+
+    // Update kernel monitor when kernel is ready
+    this.updateKernelMonitor();
 
     // Show loading animation
     this.displayManager.displayExecutionLoading(fileUri, codeRange);
@@ -206,6 +217,9 @@ export class ExecutionManager {
     // Associate this file with the selected kernel
     this.sessions.set(fileUri, selected.kernelId);
     logInfo(`Connected file to kernel ${selected.kernelId}`);
+
+    // Update kernel monitor
+    this.updateKernelMonitor();
   }
 
   /**
@@ -226,6 +240,13 @@ export class ExecutionManager {
       return;
     }
 
+    await this.interruptKernelById(kernelId);
+  }
+
+  /**
+   * Interrupt kernel by ID
+   */
+  public async interruptKernelById(kernelId: string): Promise<void> {
     try {
       await this.kernelManager.interruptKernel(kernelId);
       vscode.window.showInformationMessage("Kernel interrupted");
@@ -252,9 +273,17 @@ export class ExecutionManager {
       return;
     }
 
+    await this.restartKernelById(kernelId);
+  }
+
+  /**
+   * Restart kernel by ID
+   */
+  public async restartKernelById(kernelId: string): Promise<void> {
     try {
       await this.kernelManager.restartKernel(kernelId);
       vscode.window.showInformationMessage("Kernel restarted");
+      this.updateKernelMonitor();
     } catch (error) {
       vscode.window.showErrorMessage(`Failed to restart kernel: ${error}`);
     }
@@ -278,6 +307,13 @@ export class ExecutionManager {
       return;
     }
 
+    await this.shutdownKernelById(kernelId);
+  }
+
+  /**
+   * Shutdown kernel by ID
+   */
+  public async shutdownKernelById(kernelId: string): Promise<void> {
     try {
       await this.kernelManager.shutdownKernel(kernelId);
 
@@ -291,6 +327,7 @@ export class ExecutionManager {
       }
 
       vscode.window.showInformationMessage("Kernel shutdown");
+      this.updateKernelMonitor();
     } catch (error) {
       vscode.window.showErrorMessage(`Failed to shutdown kernel: ${error}`);
     }
@@ -310,9 +347,67 @@ export class ExecutionManager {
     this.displayManager.clearResults(fileUri);
   }
 
+  /**
+   * Set kernel monitor instance
+   */
+  setKernelMonitor(monitor: KernelMonitor): void {
+    this.kernelMonitor = monitor;
+  }
+
+  /**
+   * Show kernel monitor panel
+   */
+  async showKernelMonitor(): Promise<void> {
+    this.updateKernelMonitor();
+    await vscode.commands.executeCommand("workbench.view.extension.protium");
+  }
+
+  /**
+   * Update kernel monitor with current kernel information
+   */
+  updateKernelMonitor(): void {
+    if (!this.kernelMonitor) {
+      return;
+    }
+
+    const activeKernels = this.kernelManager.getActiveKernels();
+
+    // Build kernel sessions from sessions map
+    const kernelSessions = new Map<string, string[]>();
+    for (const [source, kernelId] of this.sessions.entries()) {
+      if (!kernelSessions.has(kernelId)) {
+        kernelSessions.set(kernelId, []);
+      }
+      kernelSessions.get(kernelId)!.push(source);
+    }
+
+    const kernelInfos: KernelExecInfo[] = activeKernels.map((kernel) => {
+      const sources = kernelSessions.get(kernel.id) || [];
+
+      // Format sources for display
+      const connectedFiles = sources.map((s) => {
+        if (s.startsWith("file://")) {
+          return getFileNameFromUri(s);
+        }
+        return s;
+      });
+
+      return {
+        id: kernel.id,
+        name: kernel.name,
+        status: kernel.status,
+        execCount: kernel.execCount,
+        connectedFiles,
+      };
+    });
+
+    this.kernelMonitor.update(kernelInfos);
+  }
+
   dispose(): void {
     this.displayManager.dispose();
     this.kernelManager.dispose();
+    // KernelMonitor (WebviewView) is managed by VS Code, no disposal needed
     this.sessions.clear();
   }
 }

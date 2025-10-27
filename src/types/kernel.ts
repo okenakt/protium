@@ -1,6 +1,17 @@
 import { Kernel } from "@jupyterlab/services";
 
 /**
+ * Kernel execution information including session data
+ */
+export interface KernelExecInfo {
+  id: string;
+  name: string;
+  status: Kernel.Status;
+  execCount: number;
+  connectedFiles: string[];
+}
+
+/**
  * Kernel connection information for ZeroMQ communication
  * Used to configure direct kernel connections without Jupyter server
  */

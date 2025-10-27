@@ -3,7 +3,7 @@ import * as path from "path";
 
 /**
  * Load HTML template from file and replace placeholders
- * @param templatePath Relative path from project root (e.g., 'templates/display/result-panel.html')
+ * @param templatePath Relative path from project root (e.g., 'templates/result-panel/result-panel.html')
  * @param replacements Object with placeholder replacements (e.g., {maxHeight: 1000, lineHeight: 20})
  * @returns HTML string with placeholders replaced
  */

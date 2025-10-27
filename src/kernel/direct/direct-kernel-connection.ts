@@ -59,6 +59,7 @@ export class DirectKernelConnection implements Kernel.IKernelConnection {
   private _hasPendingInput = false;
   private _isDisposed = false;
   private _kernelInfo?: KernelMessage.IInfoReply;
+  private _executionCount: number = 0;
 
   // ============================================================================
   // IKernelConnection Interface: Getters
@@ -99,6 +100,14 @@ export class DirectKernelConnection implements Kernel.IKernelConnection {
     return this._hasPendingInput;
   }
 
+  public get isDisposed(): boolean {
+    return this._isDisposed;
+  }
+
+  public get executionCount(): number {
+    return this._executionCount;
+  }
+
   public get serverSettings(): ServerConnection.ISettings {
     // Return a minimal server settings object since we don't use HTTP
     return {
@@ -114,10 +123,6 @@ export class DirectKernelConnection implements Kernel.IKernelConnection {
       init: {},
       serializer: "json" as any,
     };
-  }
-
-  public get isDisposed(): boolean {
-    return this._isDisposed;
   }
 
   public get supportsSubshells(): boolean {
@@ -231,6 +236,16 @@ export class DirectKernelConnection implements Kernel.IKernelConnection {
 
     // Create execution future that sends the message via RawSocket
     const future = new ExecutionFuture(msg, this.rawSocket);
+
+    // Update execution count when future completes
+    future.done.then(() => {
+      if (
+        future.result.executionCount !== undefined &&
+        future.result.executionCount !== null
+      ) {
+        this._executionCount = future.result.executionCount;
+      }
+    });
 
     // Send the message
     if (this.rawSocket) {

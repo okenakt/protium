@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { ExecutionManager } from "./execution";
+import { KernelMonitor } from "./kernel-monitor";
 import { initializeLogger, logInfo } from "./utils/output-logger";
 import { getActiveEditor, isPythonEditor } from "./utils/vscode-apis";
 
@@ -33,6 +34,17 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Initialize execution manager
   executionManager = new ExecutionManager();
+
+  // Initialize kernel monitor
+  const kernelMonitor = new KernelMonitor(context.extensionUri, {
+    onInterrupt: (kernelId) => executionManager.interruptKernelById(kernelId),
+    onRestart: (kernelId) => executionManager.restartKernelById(kernelId),
+    onShutdown: (kernelId) => executionManager.shutdownKernelById(kernelId),
+    onVisible: () => executionManager.updateKernelMonitor(),
+  });
+
+  // Set kernel monitor in execution manager
+  executionManager.setKernelMonitor(kernelMonitor);
 
   // Register commands
   const executeAndMoveNextCmd = vscode.commands.registerCommand(
@@ -70,6 +82,19 @@ export function activate(context: vscode.ExtensionContext) {
     () => executionManager.shutdownKernel(),
   );
 
+  const showKernelMonitorCmd = vscode.commands.registerCommand(
+    "protium.showKernelMonitor",
+    () => executionManager.showKernelMonitor(),
+  );
+
+  // Register kernel monitor WebviewView provider
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(
+      "protium.kernelMonitor",
+      kernelMonitor,
+    ),
+  );
+
   // Register all disposables
   context.subscriptions.push(
     executeAndMoveNextCmd,
@@ -79,6 +104,7 @@ export function activate(context: vscode.ExtensionContext) {
     clearResultsCmd,
     restartKernelCmd,
     shutdownKernelCmd,
+    showKernelMonitorCmd,
     executionManager,
   );
 

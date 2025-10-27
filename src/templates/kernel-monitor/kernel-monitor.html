@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src {{cspSource}} 'unsafe-inline'; font-src {{cspSource}}; script-src 'nonce-{{nonce}}';"
+    />
+    <link href="{{codiconsUri}}" rel="stylesheet" />
+    <style>
+      body {
+        padding: 8px;
+        margin: 0;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        border: 1px solid var(--vscode-panel-border);
+      }
+
+      th {
+        background-color: var(--vscode-editorGroupHeader-tabsBackground);
+        text-align: left;
+        padding: 8px;
+        font-weight: 600;
+        border-bottom: 2px solid var(--vscode-panel-border);
+        position: sticky;
+        top: 0;
+      }
+
+      td {
+        padding: 8px;
+        border-bottom: 1px solid var(--vscode-panel-border);
+        vertical-align: middle;
+      }
+
+      tr:last-child td {
+        border-bottom: none;
+      }
+
+      tr:hover {
+        background-color: var(--vscode-list-hoverBackground);
+      }
+
+      .kernel-id,
+      .exec-count {
+        font-family: var(--vscode-editor-font-family);
+        font-size: 0.9em;
+        color: var(--vscode-descriptionForeground);
+      }
+
+      .files-cell {
+        max-height: 100px;
+        overflow-y: auto;
+      }
+
+      .file-item {
+        padding: 2px 0;
+        font-size: 0.9em;
+      }
+
+      .no-files {
+        color: var(--vscode-descriptionForeground);
+        font-style: italic;
+        font-size: 0.9em;
+      }
+
+      .action-buttons {
+        display: flex;
+        gap: 8px;
+      }
+
+      .action-btn {
+        padding: 4px;
+        border: none;
+        color: var(--vscode-foreground);
+        background: transparent;
+        cursor: pointer;
+        opacity: 0.7;
+      }
+
+      .action-btn:hover {
+        opacity: 1;
+      }
+      .action-btn:active {
+        opacity: 0.5;
+      }
+
+      .no-kernels {
+        text-align: center;
+        padding: 20px;
+        color: var(--vscode-descriptionForeground);
+        font-style: italic;
+      }
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.9em;
+      }
+
+      .status-indicator {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+      }
+
+      .status-idle .status-indicator {
+        background-color: var(--vscode-testing-iconPassed);
+      }
+
+      .status-busy .status-indicator {
+        background-color: var(--vscode-testing-iconQueued);
+        animation: pulse 1.5s ease-in-out infinite;
+      }
+
+      .status-starting .status-indicator {
+        background-color: var(--vscode-charts-blue);
+      }
+
+      .status-dead .status-indicator {
+        background-color: var(--vscode-testing-iconFailed);
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <table>
+      <thead>
+        <tr>
+          <th>Kernel Name</th>
+          <th>Kernel ID</th>
+          <th>Status</th>
+          <th>Exec Count</th>
+          <th>Connected Files</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td colspan="6" class="no-kernels">No active kernels</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <script nonce="{{nonce}}">
+      const vscode = acquireVsCodeApi();
+
+      function updateKernelRows(rows) {
+        const tbody = document.querySelector("tbody");
+        if (!tbody) return;
+
+        // Handle empty state
+        if (rows.length === 0) {
+          tbody.innerHTML =
+            '<tr><td colspan="6" class="no-kernels">No active kernels</td></tr>';
+          return;
+        }
+
+        // Clear and rebuild table
+        tbody.innerHTML = rows.map((rowData) => rowData.html).join("");
+      }
+
+      // Handle messages from extension
+      window.addEventListener("message", (event) => {
+        const message = event.data;
+        switch (message.command) {
+          case "updateKernelRows":
+            updateKernelRows(message.data.rows);
+            break;
+        }
+      });
+
+      // Handle button clicks
+      document.addEventListener("click", (e) => {
+        const target = e.target.closest(".action-btn");
+        if (!target) {
+          return;
+        }
+
+        const kernelId = target.getAttribute("data-kernel-id");
+        if (!kernelId) return;
+
+        if (target.classList.contains("interrupt-btn")) {
+          vscode.postMessage({ command: "interrupt", kernelId });
+        } else if (target.classList.contains("restart-btn")) {
+          vscode.postMessage({ command: "restart", kernelId });
+        } else if (target.classList.contains("shutdown-btn")) {
+          vscode.postMessage({ command: "shutdown", kernelId });
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -16,6 +16,24 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "protium",
+          "title": "Protium",
+          "icon": "icon.png"
+        }
+      ]
+    },
+    "views": {
+      "protium": [
+        {
+          "type": "webview",
+          "id": "protium.kernelMonitor",
+          "name": "Kernel Monitor"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "protium.executeAndMoveNext",
@@ -50,6 +68,11 @@
       {
         "command": "protium.shutdownKernel",
         "title": "Shutdown Kernel",
+        "category": "Protium"
+      },
+      {
+        "command": "protium.showKernelMonitor",
+        "title": "Show Kernel Monitor",
         "category": "Protium"
       }
     ],
@@ -91,6 +114,7 @@
   },
   "dependencies": {
     "@jupyterlab/services": "^7.4.6",
+    "@vscode/codicons": "^0.0.41",
     "uuid": "^10.0.0",
     "zeromq": "^6.5.0"
   },
