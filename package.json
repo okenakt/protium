@@ -3,7 +3,7 @@
   "displayName": "Protium",
   "description": "Interactive Python environment for VS Code with flexible execution in your workflow",
   "version": "0.0.1",
-  "icon": "icon.png",
+  "icon": "./images/icon.png",
   "engines": {
     "vscode": "^1.105.0"
   },
@@ -21,14 +21,14 @@
         {
           "id": "protium-panel",
           "title": "Protium",
-          "icon": "icon.png"
+          "icon": "./images/icon.png"
         }
       ],
       "activitybar": [
         {
           "id": "protium-sidebar",
           "title": "Protium Watch List",
-          "icon": "icon.png"
+          "icon": "./images/icon.png"
         }
       ]
     },
@@ -37,14 +37,16 @@
         {
           "type": "webview",
           "id": "protium.kernelMonitor",
-          "name": "Kernel Monitor"
+          "name": "Kernel Monitor",
+          "icon": "./images/icon.png"
         }
       ],
       "protium-sidebar": [
         {
           "type": "webview",
           "id": "protium.watchList",
-          "name": "Watch List"
+          "name": "Watch List",
+          "icon": "./images/icon.png"
         }
       ]
     },
