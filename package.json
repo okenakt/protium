@@ -19,18 +19,32 @@
     "viewsContainers": {
       "panel": [
         {
-          "id": "protium",
+          "id": "protium-panel",
           "title": "Protium",
+          "icon": "icon.png"
+        }
+      ],
+      "activitybar": [
+        {
+          "id": "protium-sidebar",
+          "title": "Protium Watch List",
           "icon": "icon.png"
         }
       ]
     },
     "views": {
-      "protium": [
+      "protium-panel": [
         {
           "type": "webview",
           "id": "protium.kernelMonitor",
           "name": "Kernel Monitor"
+        }
+      ],
+      "protium-sidebar": [
+        {
+          "type": "webview",
+          "id": "protium.watchList",
+          "name": "Watch List"
         }
       ]
     },
@@ -73,6 +87,11 @@
       {
         "command": "protium.showKernelMonitor",
         "title": "Show Kernel Monitor",
+        "category": "Protium"
+      },
+      {
+        "command": "protium.showWatchList",
+        "title": "Show Watch List",
         "category": "Protium"
       }
     ],

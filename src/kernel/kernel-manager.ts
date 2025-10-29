@@ -93,11 +93,13 @@ export class KernelManager {
    * @param kernelId The kernel ID to execute on
    * @param code The code to execute
    * @param onComplete Callback invoked when execution completes (any status)
+   * @param options Execution options (storeHistory: whether to store in kernel history and update execution count)
    */
   requestExecution(
     kernelId: string,
     code: string,
     onComplete: (result: ExecutionResult) => void,
+    options: { storeHistory?: boolean } = {},
   ): void {
     const kernel = this.kernels.get(kernelId);
     if (!kernel) {
@@ -105,10 +107,12 @@ export class KernelManager {
       return;
     }
 
+    const storeHistory = options.storeHistory ?? true;
+
     const future = kernel.requestExecute({
       code,
-      silent: false,
-      store_history: true,
+      silent: false, // Always false to get output
+      store_history: storeHistory,
       user_expressions: {},
       allow_stdin: false,
     }) as ExecutionFuture;
@@ -158,7 +162,9 @@ export class KernelManager {
 
       // Listen to status changes on new kernel
       newKernel.statusChanged.connect(() => {
-        logInfo(`Kernel ${newKernel.id} status changed to: ${newKernel.status}`);
+        logInfo(
+          `Kernel ${newKernel.id} status changed to: ${newKernel.status}`,
+        );
         this.onStatusChangeCallback?.();
       });
     } catch (error) {

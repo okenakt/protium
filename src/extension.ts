@@ -1,16 +1,39 @@
 import * as vscode from "vscode";
 import { ExecutionManager } from "./execution";
 import { KernelMonitor } from "./kernel-monitor";
+import { DisplayManager } from "./result-panel";
 import { initializeLogger, logInfo } from "./utils/output-logger";
 import { getActiveEditor, isPythonEditor } from "./utils/vscode-apis";
+import { WatchListManager, WatchListView } from "./watch-list";
 
 let executionManager: ExecutionManager;
+let displayManager: DisplayManager;
+let watchListManager: WatchListManager;
 
-function readyExtension(editor: vscode.TextEditor) {
+/**
+ * Handles active editor changes for Python files
+ * Centralized event handler for all Python file activation logic
+ */
+function handleActiveEditorChange(editor: vscode.TextEditor | undefined) {
+  if (!editor) {
+    vscode.commands.executeCommand("setContext", "protium.active", false);
+    return;
+  }
+
   const isPython = isPythonEditor(editor);
 
-  // Set protium.active context
+  // Set protium.active context for keybindings
   vscode.commands.executeCommand("setContext", "protium.active", isPython);
+
+  if (isPython) {
+    const fileUri = editor.document.uri.toString();
+
+    // Switch display manager to this file
+    displayManager.switchToFile(fileUri).catch(() => {});
+
+    // Update watch list manager with active file
+    watchListManager.setLastActiveFile(fileUri);
+  }
 }
 
 /**
@@ -23,17 +46,8 @@ export function activate(context: vscode.ExtensionContext) {
   const outputChannel = initializeLogger("Protium");
   context.subscriptions.push(outputChannel);
 
-  // Set initial context if there's already an active Python file
-  const activeEditor = getActiveEditor();
-  if (activeEditor) readyExtension(activeEditor);
-
-  // Set context when Python file is active
-  vscode.window.onDidChangeActiveTextEditor((editor) => {
-    editor && readyExtension(editor);
-  });
-
-  // Initialize execution manager
-  executionManager = new ExecutionManager();
+  // Initialize watch list manager
+  watchListManager = new WatchListManager();
 
   // Initialize kernel monitor
   const kernelMonitor = new KernelMonitor(context.extensionUri, {
@@ -43,8 +57,36 @@ export function activate(context: vscode.ExtensionContext) {
     onVisible: () => executionManager.updateKernelMonitor(),
   });
 
-  // Set kernel monitor in execution manager
-  executionManager.setKernelMonitor(kernelMonitor);
+  // Initialize watch list view
+  const watchListView = new WatchListView(context.extensionUri, {
+    onRemoveWatch: (watchId) => watchListManager.removeWatch(watchId),
+    onRefreshWatch: (watchId) => executionManager.evaluateWatch(watchId),
+    onRefreshAll: () => executionManager.evaluateAllWatches(),
+    onClearAll: () => watchListManager.clearAll(),
+    onAddWatch: (expression, fileUri) => {
+      const watch = watchListManager.addWatch(expression, fileUri);
+      // Auto-evaluate if kernel exists for this file
+      executionManager.evaluateWatch(watch.id);
+    },
+    onVisible: () => {
+      const currentFile = watchListManager.getLastActiveFile();
+      watchListView.update(watchListManager.getWatches(), currentFile);
+    },
+  });
+
+  // Update watch list view when watches change
+  watchListManager.onUpdate((watches) => {
+    const currentFile = watchListManager.getLastActiveFile();
+    watchListView.update(watches, currentFile);
+  });
+
+  // Initialize execution manager with dependencies
+  displayManager = new DisplayManager();
+  executionManager = new ExecutionManager(
+    displayManager,
+    kernelMonitor,
+    watchListManager,
+  );
 
   // Register commands
   const executeAndMoveNextCmd = vscode.commands.registerCommand(
@@ -87,11 +129,26 @@ export function activate(context: vscode.ExtensionContext) {
     () => executionManager.showKernelMonitor(),
   );
 
+  const showWatchListCmd = vscode.commands.registerCommand(
+    "protium.showWatchList",
+    async () => {
+      await vscode.commands.executeCommand("protium.watchList.focus");
+    },
+  );
+
   // Register kernel monitor WebviewView provider
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
       "protium.kernelMonitor",
       kernelMonitor,
+    ),
+  );
+
+  // Register watch list WebviewView provider
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(
+      "protium.watchList",
+      watchListView,
     ),
   );
 
@@ -105,8 +162,16 @@ export function activate(context: vscode.ExtensionContext) {
     restartKernelCmd,
     shutdownKernelCmd,
     showKernelMonitorCmd,
+    showWatchListCmd,
     executionManager,
   );
+
+  // Handle initial active editor
+  const initialEditor = getActiveEditor();
+  handleActiveEditorChange(initialEditor);
+
+  // Handle active editor changes
+  vscode.window.onDidChangeActiveTextEditor(handleActiveEditorChange);
 
   logInfo("Protium activated");
 }

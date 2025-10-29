@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src {{cspSource}} 'unsafe-inline'; font-src {{cspSource}}; script-src 'nonce-{{nonce}}';"
+    />
+    <link href="{{codiconsUri}}" rel="stylesheet" />
+    <style>
+      body {
+        padding: 8px;
+        margin: 0;
+      }
+
+      .context-bar {
+        padding: 6px 8px;
+        margin-bottom: 8px;
+        border: 1px solid var(--vscode-panel-border);
+        font-size: 12px;
+        color: var(--vscode-descriptionForeground);
+      }
+
+      .add-watch {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+
+      .watch-input {
+        flex: 1;
+        padding: 6px 8px;
+        background: var(--vscode-input-background);
+        color: var(--vscode-input-foreground);
+        border: 1px solid var(--vscode-input-border);
+        font-family: var(--vscode-editor-font-family);
+      }
+
+      .watch-input:focus {
+        outline: 1px solid var(--vscode-focusBorder);
+      }
+
+      button {
+        padding: 6px 12px;
+        border: none;
+        cursor: pointer;
+      }
+
+      .add-btn {
+        color: var(--vscode-button-foreground);
+        background: var(--vscode-button-background);
+      }
+
+      .add-btn:hover {
+        background: var(--vscode-button-hoverBackground);
+      }
+
+      .add-btn:disabled {
+        opacity: 0.5;
+      }
+
+      .toolbar {
+        display: flex;
+        justify-content: flex-end;
+        gap: 4px;
+        margin-bottom: 8px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--vscode-panel-border);
+      }
+
+      .toolbar button {
+        padding: 4px 8px;
+        color: var(--vscode-foreground);
+        background: var(--vscode-button-secondaryBackground);
+      }
+
+      .toolbar button:hover {
+        background: var(--vscode-button-secondaryHoverBackground);
+      }
+
+      .watch-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .watch-item {
+        padding: 8px;
+        border: 1px solid var(--vscode-panel-border);
+      }
+
+      .watch-item:hover {
+        background: var(--vscode-list-hoverBackground);
+      }
+
+      .watch-header {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 4px;
+      }
+
+      .watch-expr {
+        flex: 1;
+        font-family: var(--vscode-editor-font-family);
+        word-break: break-all;
+      }
+
+      .action-btn {
+        padding: 2px 4px;
+        background: transparent;
+        opacity: 0.7;
+      }
+
+      .action-btn:hover {
+        opacity: 1;
+      }
+
+      .watch-value {
+        padding: 6px 8px;
+        background: var(--vscode-textCodeBlock-background);
+        border-left: 3px solid var(--vscode-textLink-foreground);
+        font-family: var(--vscode-editor-font-family);
+        font-size: 12px;
+        white-space: pre-wrap;
+        max-height: 200px;
+        overflow-y: auto;
+      }
+
+      .watch-error {
+        padding: 6px 8px;
+        background: var(--vscode-inputValidation-errorBackground);
+        border-left: 3px solid var(--vscode-inputValidation-errorBorder);
+        font-family: var(--vscode-editor-font-family);
+        font-size: 12px;
+        color: var(--vscode-errorForeground);
+        white-space: pre-wrap;
+      }
+
+      .no-watches {
+        text-align: center;
+        padding: 20px;
+        color: var(--vscode-descriptionForeground);
+        font-style: italic;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="context-bar" id="ctx">No active file</div>
+    <div class="add-watch">
+      <input
+        type="text"
+        class="watch-input"
+        id="input"
+        placeholder="Enter expression to watch"
+      />
+      <button class="add-btn" id="add">Add</button>
+    </div>
+    <div class="toolbar">
+      <button id="refresh-all">
+        <i class="codicon codicon-refresh"></i> Refresh All
+      </button>
+      <button id="clear-all">
+        <i class="codicon codicon-clear-all"></i> Clear All
+      </button>
+    </div>
+    <div id="list" class="watch-list">
+      <div class="no-watches">
+        No watches for this file.<br />Enter an expression above.
+      </div>
+    </div>
+    <script nonce="{{nonce}}">
+      const vscode = acquireVsCodeApi();
+      let fileUri = null;
+
+      function updateWatchList(html) {
+        const list = document.getElementById("list");
+        if (!list) return;
+        list.innerHTML = html;
+      }
+
+      function updateContext(uri) {
+        fileUri = uri;
+        const ctx = document.getElementById("ctx");
+        const add = document.getElementById("add");
+        if (!ctx || !add) return;
+
+        if (uri) {
+          ctx.textContent = uri.split("/").pop() || uri;
+          ctx.title = uri;
+          add.disabled = false;
+        } else {
+          ctx.textContent = "No active Python file";
+          add.disabled = true;
+        }
+      }
+
+      // Handle messages from extension
+      window.addEventListener("message", (event) => {
+        const message = event.data;
+        switch (message.command) {
+          case "updateWatchList":
+            updateWatchList(message.data.html);
+            if (message.data.fileUri !== undefined) {
+              updateContext(message.data.fileUri);
+            }
+            break;
+        }
+      });
+
+      // Handle add watch button
+      document.getElementById("add").addEventListener("click", () => {
+        const input = document.getElementById("input");
+        const expr = input.value.trim();
+        if (expr && fileUri) {
+          vscode.postMessage({ command: "addWatch", expression: expr });
+          input.value = "";
+        }
+      });
+
+      // Handle Enter key in input
+      document.getElementById("input").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          document.getElementById("add").click();
+        }
+      });
+
+      // Handle button clicks
+      document.addEventListener("click", (e) => {
+        const target = e.target.closest("button");
+        if (!target) return;
+
+        const watchId = target.getAttribute("data-id");
+
+        if (target.id === "refresh-all") {
+          vscode.postMessage({ command: "refreshAll" });
+        } else if (target.id === "clear-all") {
+          vscode.postMessage({ command: "clearAll" });
+        } else if (target.classList.contains("refresh-btn") && watchId) {
+          vscode.postMessage({ command: "refreshWatch", watchId });
+        } else if (target.classList.contains("delete-btn") && watchId) {
+          vscode.postMessage({ command: "removeWatch", watchId });
+        }
+      });
+    </script>
+  </body>
+</html>

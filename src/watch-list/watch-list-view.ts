@@ -1,0 +1,223 @@
+import * as vscode from "vscode";
+import { WatchExpression } from "../types/watch";
+import { logInfo } from "../utils";
+import { escapeHtml, getNonce, loadTemplate } from "../utils/html-utils";
+
+/**
+ * Displays watch expressions in a webview panel
+ */
+export class WatchListView implements vscode.WebviewViewProvider {
+  public static readonly viewType = "protium.watchList";
+
+  private view?: vscode.WebviewView;
+  private watches: WatchExpression[] = [];
+  private currentFileUri: string | undefined;
+  private initialized = false;
+
+  constructor(
+    private readonly extensionUri: vscode.Uri,
+    private callbacks?: {
+      onRemoveWatch?: (watchId: string) => void;
+      onRefreshWatch?: (watchId: string) => void;
+      onRefreshAll?: () => void;
+      onClearAll?: () => void;
+      onAddWatch?: (expression: string, fileUri: string) => void;
+      onVisible?: () => void;
+    },
+  ) {}
+
+  /**
+   * Resolves the webview view when it becomes visible.
+   * @param webviewView The webview view to resolve
+   */
+  public resolveWebviewView(
+    webviewView: vscode.WebviewView,
+    _context: vscode.WebviewViewResolveContext,
+    _token: vscode.CancellationToken,
+  ): void {
+    this.view = webviewView;
+
+    webviewView.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [
+        this.extensionUri,
+        vscode.Uri.joinPath(
+          this.extensionUri,
+          "node_modules",
+          "@vscode",
+          "codicons",
+          "dist",
+        ),
+      ],
+    };
+
+    this.setupMessageHandler(webviewView);
+    this.setupVisibilityHandler(webviewView);
+    this.initialize();
+
+    if (webviewView.visible) {
+      this.callbacks?.onVisible?.();
+    }
+
+    logInfo("Watch list view created");
+  }
+
+  /**
+   * Updates the watch list display with current data.
+   * @param watches Array of watch expressions to display
+   * @param currentFileUri Current active file URI
+   */
+  public update(watches: WatchExpression[], currentFileUri?: string): void {
+    if (!this.view || !this.initialized) {
+      return;
+    }
+
+    this.watches = watches;
+    if (currentFileUri !== undefined) {
+      this.currentFileUri = currentFileUri;
+    }
+
+    // Filter watches for current file
+    const filteredWatches = this.currentFileUri
+      ? watches.filter((w) => w.filePath === this.currentFileUri)
+      : watches;
+
+    logInfo(
+      `Updating watch list: ${filteredWatches.length}/${this.watches.length} watches for file: ${this.currentFileUri}`,
+    );
+
+    const html = this.renderWatches(filteredWatches);
+
+    this.view.webview.postMessage({
+      command: "updateWatchList",
+      data: {
+        html,
+        fileUri: this.currentFileUri,
+      },
+    });
+  }
+
+  /**
+   * Renders watches as HTML
+   * @param watches Watches to render
+   * @returns HTML string
+   */
+  private renderWatches(watches: WatchExpression[]): string {
+    if (watches.length === 0) {
+      return '<div class="no-watches">No watches for this file.<br/>Enter an expression above.</div>';
+    }
+
+    return watches
+      .map((w) => {
+        const expr = escapeHtml(w.expression);
+        let valueHtml: string;
+        if (w.error) {
+          valueHtml = `<div class="watch-error">${escapeHtml(w.error)}</div>`;
+        } else if (w.value !== undefined) {
+          valueHtml = `<div class="watch-value">${escapeHtml(w.value)}</div>`;
+        } else {
+          valueHtml = '<div class="watch-pending">Not evaluated yet</div>';
+        }
+
+        return `
+          <div class="watch-item">
+            <div class="watch-header">
+              <div class="watch-expr">${expr}</div>
+              <button class="action-btn refresh-btn" data-id="${w.id}" title="Refresh">
+                <i class="codicon codicon-refresh"></i>
+              </button>
+              <button class="action-btn delete-btn" data-id="${w.id}" title="Remove">
+                <i class="codicon codicon-close"></i>
+              </button>
+            </div>
+            ${valueHtml}
+          </div>`;
+      })
+      .join("");
+  }
+
+  /**
+   * Updates the current file context
+   * @param fileUri Current file URI
+   */
+  public setCurrentFile(fileUri: string): void {
+    if (this.currentFileUri !== fileUri) {
+      this.currentFileUri = fileUri;
+      logInfo(`Watch list switched to file: ${fileUri}`);
+      this.update(this.watches, fileUri);
+    }
+  }
+
+  /**
+   * Sets up message handler for webview commands.
+   * @param webviewView The webview view to attach handler to
+   */
+  private setupMessageHandler(webviewView: vscode.WebviewView): void {
+    webviewView.webview.onDidReceiveMessage((message) => {
+      switch (message.command) {
+        case "removeWatch":
+          this.callbacks?.onRemoveWatch?.(message.watchId);
+          break;
+        case "refreshWatch":
+          this.callbacks?.onRefreshWatch?.(message.watchId);
+          break;
+        case "refreshAll":
+          this.callbacks?.onRefreshAll?.();
+          break;
+        case "clearAll":
+          this.callbacks?.onClearAll?.();
+          break;
+        case "addWatch":
+          if (this.currentFileUri && message.expression) {
+            this.callbacks?.onAddWatch?.(message.expression, this.currentFileUri);
+          }
+          break;
+      }
+    });
+  }
+
+  /**
+   * Sets up visibility change handler
+   * @param webviewView The webview view to attach handler to
+   */
+  private setupVisibilityHandler(webviewView: vscode.WebviewView): void {
+    webviewView.onDidChangeVisibility(() => {
+      if (webviewView.visible) {
+        this.callbacks?.onVisible?.();
+      }
+    });
+  }
+
+  /**
+   * Initializes the webview with HTML content
+   */
+  private initialize(): void {
+    if (!this.view) {
+      return;
+    }
+
+    const webview = this.view.webview;
+    const nonce = getNonce();
+
+    const codiconsUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(
+        this.extensionUri,
+        "node_modules",
+        "@vscode",
+        "codicons",
+        "dist",
+        "codicon.css",
+      ),
+    );
+
+    webview.html = loadTemplate("templates/watch-list/watch-list.html", {
+      nonce,
+      cspSource: webview.cspSource,
+      codiconsUri: codiconsUri.toString(),
+    });
+
+    this.initialized = true;
+
+    logInfo("Watch list view initialized");
+  }
+}

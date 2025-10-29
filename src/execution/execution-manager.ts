@@ -3,12 +3,12 @@ import { KernelManager } from "../kernel";
 import { KernelMonitor } from "../kernel-monitor";
 import { DisplayManager } from "../result-panel";
 import { KernelExecInfo } from "../types/kernel";
-import { logInfo } from "../utils";
+import { logInfo, logWarn } from "../utils";
 import {
   getActivePythonEditor,
   getFileNameFromUri,
-  isPythonEditor,
 } from "../utils/vscode-apis";
+import { WatchListManager } from "../watch-list";
 import { BlockDetector } from "./";
 
 /**
@@ -18,25 +18,24 @@ export class ExecutionManager {
   private blockDetector: BlockDetector;
   private kernelManager: KernelManager;
   private displayManager: DisplayManager;
-  private kernelMonitor: KernelMonitor | undefined;
+  private kernelMonitor: KernelMonitor;
+  private watchListManager: WatchListManager;
   private sessions: Map<string, string> = new Map();
 
-  constructor() {
+  constructor(
+    displayManager: DisplayManager,
+    kernelMonitor: KernelMonitor,
+    watchListManager: WatchListManager,
+  ) {
     this.blockDetector = new BlockDetector();
-    this.displayManager = new DisplayManager();
+    this.displayManager = displayManager;
     this.kernelManager = new KernelManager();
+    this.kernelMonitor = kernelMonitor;
+    this.watchListManager = watchListManager;
 
     // Set up kernel status change callback
     this.kernelManager.setOnStatusChange(() => {
       this.updateKernelMonitor();
-    });
-
-    // Listen to active editor changes to update display
-    vscode.window.onDidChangeActiveTextEditor((editor) => {
-      if (isPythonEditor(editor)) {
-        const fileUri = editor.document.uri.toString();
-        this.displayManager.switchToFile(fileUri).catch(() => {});
-      }
     });
   }
 
@@ -119,10 +118,20 @@ export class ExecutionManager {
     this.displayManager.displayExecutionLoading(fileUri, codeRange);
 
     // Execute code on kernel
-    this.kernelManager.requestExecution(kernelId, code, (result) => {
-      // Display result
-      this.displayManager.displayResult(fileUri, codeRange, result);
-    });
+    this.kernelManager.requestExecution(
+      kernelId,
+      code,
+      (result) => {
+        // Display result
+        this.displayManager.displayResult(fileUri, codeRange, result);
+
+        // Auto-refresh watch list for this file after successful execution
+        if (result.status === "ok") {
+          this.evaluateWatchesForFile(fileUri);
+        }
+      },
+      { storeHistory: true }, // Store in history and update execution count
+    );
 
     return { editor, codeRange };
   }
@@ -348,18 +357,13 @@ export class ExecutionManager {
   }
 
   /**
-   * Set kernel monitor instance
-   */
-  setKernelMonitor(monitor: KernelMonitor): void {
-    this.kernelMonitor = monitor;
-  }
-
-  /**
    * Show kernel monitor panel
    */
   async showKernelMonitor(): Promise<void> {
     this.updateKernelMonitor();
-    await vscode.commands.executeCommand("workbench.view.extension.protium");
+    await vscode.commands.executeCommand(
+      "workbench.view.extension.protium-panel",
+    );
   }
 
   /**
@@ -402,6 +406,82 @@ export class ExecutionManager {
     });
 
     this.kernelMonitor.update(kernelInfos);
+  }
+
+  /**
+   * Evaluates a single watch expression
+   */
+  async evaluateWatch(watchId: string): Promise<void> {
+    const watch = this.watchListManager.getWatch(watchId);
+    if (!watch) {
+      logWarn(`Watch not found: ${watchId}`);
+      return;
+    }
+
+    const kernelId = this.sessions.get(watch.filePath);
+    if (!kernelId) {
+      this.watchListManager.updateWatchValue(
+        watchId,
+        undefined,
+        "No kernel running for this file",
+      );
+      return;
+    }
+
+    logInfo(`Evaluating watch: ${watch.expression}`);
+
+    // Use storeHistory=false to avoid incrementing execution count
+    this.kernelManager.requestExecution(
+      kernelId,
+      watch.expression,
+      (result) => {
+        if (result.error) {
+          this.watchListManager.updateWatchValue(
+            watchId,
+            undefined,
+            result.error,
+          );
+        } else {
+          // Extract value from mimeData (text/plain) or output
+          let value = result.output;
+          if (!value && result.mimeData && result.mimeData["text/plain"]) {
+            value = result.mimeData["text/plain"];
+          }
+
+          // Don't update if no output (keep previous value)
+          if (!value) {
+            logWarn(
+              `Watch evaluation returned no output for: ${watch.expression}`,
+            );
+            return;
+          }
+
+          this.watchListManager.updateWatchValue(watchId, value);
+        }
+      },
+      { storeHistory: false }, // Don't store in history to avoid incrementing execution count
+    );
+  }
+
+  /**
+   * Evaluates all watch expressions
+   */
+  async evaluateAllWatches(): Promise<void> {
+    const watches = this.watchListManager.getWatches();
+    for (const watch of watches) {
+      await this.evaluateWatch(watch.id);
+    }
+  }
+
+  /**
+   * Evaluates watch expressions for a specific file
+   * @param fileUri File URI to evaluate watches for
+   */
+  private evaluateWatchesForFile(fileUri: string): void {
+    const watches = this.watchListManager.getWatchesForFile(fileUri);
+    for (const watch of watches) {
+      this.evaluateWatch(watch.id);
+    }
   }
 
   dispose(): void {

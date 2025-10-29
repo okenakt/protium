@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { KernelExecInfo } from "../types/kernel";
 import { logInfo } from "../utils";
-import { escapeHtml, loadTemplate } from "../utils/html-utils";
+import { escapeHtml, getNonce, loadTemplate } from "../utils/html-utils";
 
 /**
  * Displays kernel status in a table format in the bottom panel.
@@ -127,12 +127,13 @@ export class KernelMonitor implements vscode.WebviewViewProvider {
 
     logInfo("Initializing kernel monitor HTML");
 
-    const nonce = this.getNonce();
+    const nonce = getNonce();
     const codiconsUri = this.view.webview.asWebviewUri(
       vscode.Uri.joinPath(
         this.extensionUri,
         "node_modules",
-        "@vscode/codicons",
+        "@vscode",
+        "codicons",
         "dist",
         "codicon.css",
       ),
@@ -183,17 +184,4 @@ export class KernelMonitor implements vscode.WebviewViewProvider {
     });
   }
 
-  /**
-   * Generates a random nonce for Content Security Policy.
-   * @returns Random 32-character string
-   */
-  private getNonce(): string {
-    let text = "";
-    const possible =
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    for (let i = 0; i < 32; i++) {
-      text += possible.charAt(Math.floor(Math.random() * possible.length));
-    }
-    return text;
-  }
 }
