@@ -5,7 +5,7 @@ import {
   DirectKernelConnectionOptions,
   KernelConnectionInfo,
 } from "../../types";
-import { logInfo } from "../../utils";
+import { logDebug, logError } from "../../utils";
 import { ExecutionFuture } from "./execution-future";
 import { RawSocket } from "./raw-socket";
 
@@ -60,6 +60,7 @@ export class DirectKernelConnection implements Kernel.IKernelConnection {
   private _isDisposed = false;
   private _kernelInfo?: KernelMessage.IInfoReply;
   private _executionCount: number = 0;
+  private pendingFutures: Map<string, ExecutionFuture> = new Map();
 
   // ============================================================================
   // IKernelConnection Interface: Getters
@@ -145,7 +146,7 @@ export class DirectKernelConnection implements Kernel.IKernelConnection {
     this.name = options.model.name;
     this.connectionInfo = options.connectionInfo;
 
-    logInfo(`Creating DirectKernelConnection for kernel: ${this.id}`);
+    logDebug(`Creating DirectKernelConnection for kernel: ${this.id}`);
 
     // Create RawSocket connection with event handlers
     this.rawSocket = new RawSocket(this.connectionInfo, {
@@ -169,8 +170,8 @@ export class DirectKernelConnection implements Kernel.IKernelConnection {
         try {
           // Process the message and emit appropriate signals
           this.handleMessage(event);
-        } catch {
-          // Ignore message handling errors
+        } catch (error) {
+          logError(`Error in message handler: ${error}`, error);
         }
       },
     });
@@ -234,23 +235,16 @@ export class DirectKernelConnection implements Kernel.IKernelConnection {
       buffers: [],
     };
 
-    // Create execution future that sends the message via RawSocket
-    const future = new ExecutionFuture(msg, this.rawSocket);
+    // Create execution future
+    const future = new ExecutionFuture(msg);
 
-    // Update execution count when future completes
-    future.done.then(() => {
-      if (
-        future.result.executionCount !== undefined &&
-        future.result.executionCount !== null
-      ) {
-        this._executionCount = future.result.executionCount;
-      }
-    });
+    // Register future in pending map for message routing
+    this.pendingFutures.set(msg.header.msg_id, future);
 
     // Send the message
     if (this.rawSocket) {
       this.rawSocket.send(JSON.stringify(msg));
-      logInfo(
+      logDebug(
         `Execute request sent to kernel: ${this.id}, msg_id: ${msg.header.msg_id}`,
       );
     }
@@ -344,7 +338,7 @@ export class DirectKernelConnection implements Kernel.IKernelConnection {
 
     if (this.rawSocket) {
       this.rawSocket.send(JSON.stringify(msg));
-      logInfo(`Interrupt request sent to kernel: ${this.id}`);
+      logDebug(`Interrupt request sent to kernel: ${this.id}`);
     }
   }
 
@@ -357,7 +351,7 @@ export class DirectKernelConnection implements Kernel.IKernelConnection {
       return;
     }
 
-    logInfo(`Shutting down DirectKernelConnection for kernel: ${this.id}`);
+    logDebug(`Shutting down DirectKernelConnection for kernel: ${this.id}`);
 
     this._status = "dead";
     this.statusChanged.emit("dead");
@@ -378,7 +372,7 @@ export class DirectKernelConnection implements Kernel.IKernelConnection {
 
     this.disposed.emit();
 
-    logInfo(`Disposed DirectKernelConnection for kernel: ${this.id}`);
+    logDebug(`Disposed DirectKernelConnection for kernel: ${this.id}`);
   }
 
   public clone(
@@ -485,30 +479,37 @@ export class DirectKernelConnection implements Kernel.IKernelConnection {
       const message = JSON.parse(event.data);
       const msgType = message.header?.msg_type;
       const channel = message.channel;
+      const parentMsgId = message.parent_header?.msg_id;
 
-      // Handle different message types
+      // Route message to pending ExecutionFuture if it exists
+      if (parentMsgId && this.pendingFutures.has(parentMsgId)) {
+        const future = this.pendingFutures.get(parentMsgId)!;
+        future.handleMessage(message);
+
+        // When execution completes, update execution count and cleanup
+        if (msgType === "execute_reply") {
+          if (
+            future.result.executionCount !== undefined &&
+            future.result.executionCount !== null
+          ) {
+            this._executionCount = future.result.executionCount;
+          }
+          this.pendingFutures.delete(parentMsgId);
+        }
+      }
+
+      // Handle kernel-level message types
       switch (msgType) {
         case "status":
           this.handleStatusMessage(message);
-          break;
-        case "execute_reply":
-          this.handleExecuteReply(message);
-          break;
-        case "interrupt_reply":
-          logInfo(
-            `Interrupt reply received, status: "${message.content?.status}", kernel: ${this.id}`,
-          );
-          break;
-        case "stream":
-        case "display_data":
-        case "execute_result":
-        case "error":
-          this.handleIOPubMessage(message);
           break;
         case "kernel_info_reply":
           this.handleKernelInfoReply(message);
           break;
         default:
+          // Other message types (execute_reply, stream, display_data, execute_result, error, interrupt_reply)
+          // are handled by ExecutionFuture via routing or can be ignored at this level
+          break;
       }
 
       // Emit the message to appropriate signal based on channel
@@ -521,8 +522,8 @@ export class DirectKernelConnection implements Kernel.IKernelConnection {
         msg: message,
         direction: "recv",
       });
-    } catch {
-      // Ignore JSON parse errors
+    } catch (error) {
+      logError(`Failed to handle kernel message: ${error}`, error);
     }
   }
 
@@ -547,22 +548,6 @@ export class DirectKernelConnection implements Kernel.IKernelConnection {
       this._status = newStatus;
       this.statusChanged.emit(this._status);
     }
-  }
-
-  /**
-   * Handle execute reply messages
-   * @param _message Execute reply message
-   */
-  private handleExecuteReply(_message: KernelMessage.IExecuteReplyMsg): void {
-    // Execute reply handling is primarily done in ExecutionFuture
-  }
-
-  /**
-   * Handle IOPub messages (output, display data, etc.)
-   * @param _message IOPub message
-   */
-  private handleIOPubMessage(_message: KernelMessage.IIOPubMessage): void {
-    // This will be handled by ExecutionFuture for specific execution results
   }
 
   /**

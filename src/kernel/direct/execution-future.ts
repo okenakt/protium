@@ -1,8 +1,7 @@
 import { Kernel, KernelMessage } from "@jupyterlab/services";
 import { Signal } from "@lumino/signaling";
 import { ExecutionResult } from "../../types";
-import { logInfo } from "../../utils";
-import { RawSocket } from "./raw-socket";
+import { logDebug } from "../../utils";
 
 /**
  * ExecutionFuture handles streaming output and final reply from Jupyter kernel
@@ -45,18 +44,19 @@ export class ExecutionFuture
     | ((reply: KernelMessage.IExecuteReplyMsg) => void)
     | null = null;
   private replyPromiseReject: ((reason?: any) => void) | null = null;
-  private rawSocket?: RawSocket;
   private _result: ExecutionResult = {
     status: "ok",
   };
+
+  // Event emitter for streaming updates
+  private streamListeners: Array<(result: ExecutionResult) => void> = [];
 
   // ============================================================================
   // Constructor
   // ============================================================================
 
-  constructor(msg: KernelMessage.IExecuteRequestMsg, rawSocket?: RawSocket) {
+  constructor(msg: KernelMessage.IExecuteRequestMsg) {
     this.msg = msg;
-    this.rawSocket = rawSocket;
 
     // Create a promise that will be resolved when we receive execute_reply
     // Note: Promise is resolved even for status="error" or status="aborted"
@@ -68,11 +68,6 @@ export class ExecutionFuture
         this.replyPromiseReject = reject;
       },
     );
-
-    // Set up message handling if we have a socket
-    if (this.rawSocket) {
-      this.setupMessageHandling();
-    }
   }
 
   // ============================================================================
@@ -85,6 +80,26 @@ export class ExecutionFuture
    */
   public get result(): ExecutionResult {
     return this._result;
+  }
+
+  // ============================================================================
+  // Event Listener Methods
+  // ============================================================================
+
+  /**
+   * Register a listener for streaming updates
+   * @param listener Callback invoked on each intermediate result update
+   */
+  public onStream(listener: (result: ExecutionResult) => void): void {
+    this.streamListeners.push(listener);
+  }
+
+  /**
+   * Emit streaming update to all registered listeners
+   * @param result Current execution result
+   */
+  private emitStream(result: ExecutionResult): void {
+    this.streamListeners.forEach((listener) => listener(result));
   }
 
   // ============================================================================
@@ -118,60 +133,50 @@ export class ExecutionFuture
   }
 
   // ============================================================================
+  // Public Methods for Message Handling (called by DirectKernelConnection)
+  // ============================================================================
+
+  /**
+   * Handle incoming message from kernel
+   * Called by DirectKernelConnection when a message with matching parent_header.msg_id is received
+   * @param message Kernel message
+   */
+  public handleMessage(message: any): void {
+    const msgType = message.header?.msg_type;
+
+    if (msgType === "execute_reply") {
+      // This is our reply - finalize result
+      const status = message.content.status;
+      logDebug(
+        `Execute reply received, status: "${status}", msg_id: ${this.msg.header.msg_id}`,
+      );
+
+      if (
+        message.content.execution_count !== undefined &&
+        message.content.execution_count !== null
+      ) {
+        this._result.executionCount = message.content.execution_count;
+      }
+
+      // Set execution result based on status
+      this._result.status = status;
+
+      if (this.replyPromiseResolve) {
+        this.replyPromiseResolve(message);
+      }
+    } else if (message.channel === "iopub") {
+      // This is an IOPub message (output, status, etc.)
+      this.handleIOPubOutput(message);
+    }
+  }
+
+  // ============================================================================
   // Private Helper Methods
   // ============================================================================
 
-  private setupMessageHandling(): void {
-    if (!this.rawSocket) return;
-
-    // Store the original onmessage handler
-    const originalOnMessage = this.rawSocket.onMessage;
-
-    // Override the onmessage handler to intercept our responses
-    this.rawSocket.onMessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-
-        // Check if this message is related to our request
-        if (message.parent_header?.msg_id === this.msg.header.msg_id) {
-          if (message.header?.msg_type === "execute_reply") {
-            // This is our reply - finalize result
-            const status = message.content.status;
-            logInfo(
-              `Execute reply received, status: "${status}", msg_id: ${this.msg.header.msg_id}`,
-            );
-
-            if (
-              message.content.execution_count !== undefined &&
-              message.content.execution_count !== null
-            ) {
-              this._result.executionCount = message.content.execution_count;
-            }
-
-            // Set execution result based on status
-            this._result.status = status;
-
-            if (this.replyPromiseResolve) {
-              this.replyPromiseResolve(message);
-            }
-          } else if (message.channel === "iopub") {
-            // This is an IOPub message (output, status, etc.)
-            this.handleIOPubOutput(message);
-          }
-        }
-      } catch {
-        // Ignore message parsing errors
-      }
-
-      // Call the original handler
-      if (originalOnMessage) {
-        originalOnMessage(event);
-      }
-    };
-  }
-
   private handleIOPubOutput(message: any): void {
     const msgType = message.header?.msg_type;
+    let shouldNotify = false;
 
     // Accumulate output into result
     switch (msgType) {
@@ -179,9 +184,11 @@ export class ExecutionFuture
         if (message.content.name === "stdout") {
           this._result.output =
             (this._result.output || "") + message.content.text;
+          shouldNotify = true;
         } else if (message.content.name === "stderr") {
           this._result.error =
             (this._result.error || "") + message.content.text;
+          shouldNotify = true;
         }
         break;
       }
@@ -205,6 +212,7 @@ export class ExecutionFuture
             this._result.output =
               (this._result.output || "") + data["text/plain"];
           }
+          shouldNotify = true;
         }
         break;
       }
@@ -214,8 +222,14 @@ export class ExecutionFuture
           message.content.evalue ||
           "Unknown error";
         this._result.error = (this._result.error || "") + errorText;
+        shouldNotify = true;
         break;
       }
+    }
+
+    // Emit streaming update with intermediate result
+    if (shouldNotify) {
+      this.emitStream({ ...this._result });
     }
   }
 }

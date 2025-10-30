@@ -117,12 +117,12 @@ export class ExecutionManager {
     // Show loading animation
     this.resultDisplayManager.displayExecutionLoading(fileUri, codeRange);
 
-    // Execute code on kernel
+    // Execute code on kernel with streaming updates
     this.kernelManager.requestExecution(
       kernelId,
       code,
       (result) => {
-        // Display result
+        // Display final result
         this.resultDisplayManager.displayResult(fileUri, codeRange, result);
 
         // Auto-refresh watch list for this file after successful execution
@@ -130,7 +130,15 @@ export class ExecutionManager {
           this.evaluateWatchesForFile(fileUri);
         }
       },
-      { storeHistory: true }, // Store in history and update execution count
+      true, // Store in history and update execution count
+      (intermediateResult) => {
+        // Display intermediate streaming result
+        this.resultDisplayManager.displayResult(
+          fileUri,
+          codeRange,
+          intermediateResult,
+        );
+      },
     );
 
     return { editor, codeRange };
@@ -410,6 +418,9 @@ export class ExecutionManager {
 
   /**
    * Evaluates a single watch expression
+   * Note: Watch evaluation cannot use streaming updates because the kernel
+   * processes execution requests serially. While main code is executing,
+   * watch evaluation requests are queued and only processed after completion.
    */
   async evaluateWatch(watchId: string): Promise<void> {
     const watch = this.watchListManager.getWatch(watchId);
@@ -431,6 +442,7 @@ export class ExecutionManager {
     logInfo(`Evaluating watch: ${watch.expression}`);
 
     // Use storeHistory=false to avoid incrementing execution count
+    // Note: No onStream callback - kernel processes requests serially
     this.kernelManager.requestExecution(
       kernelId,
       watch.expression,
@@ -459,7 +471,7 @@ export class ExecutionManager {
           this.watchListManager.updateWatchValue(watchId, value);
         }
       },
-      { storeHistory: false }, // Don't store in history to avoid incrementing execution count
+      false, // Don't store in history to avoid incrementing execution count
     );
   }
 

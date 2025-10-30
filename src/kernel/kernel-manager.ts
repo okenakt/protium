@@ -3,7 +3,7 @@ import * as vscode from "vscode";
 import { getPythonInterpreter } from "../interpreter";
 import { ExecutionResult } from "../types";
 import { logError, logInfo } from "../utils";
-import { DirectKernelProvider, ExecutionFuture } from "./direct";
+import { DirectKernelProvider } from "./direct";
 
 /**
  * KernelManager manages kernel instances and their connections
@@ -93,13 +93,15 @@ export class KernelManager {
    * @param kernelId The kernel ID to execute on
    * @param code The code to execute
    * @param onComplete Callback invoked when execution completes (any status)
-   * @param options Execution options (storeHistory: whether to store in kernel history and update execution count)
+   * @param storeHistory Whether to store in kernel history and update execution count (default: true)
+   * @param onStream Callback for streaming updates during execution (optional)
    */
   requestExecution(
     kernelId: string,
     code: string,
     onComplete: (result: ExecutionResult) => void,
-    options: { storeHistory?: boolean } = {},
+    storeHistory: boolean = true,
+    onStream?: (result: ExecutionResult) => void,
   ): void {
     const kernel = this.kernels.get(kernelId);
     if (!kernel) {
@@ -107,26 +109,27 @@ export class KernelManager {
       return;
     }
 
-    const storeHistory = options.storeHistory ?? true;
-
+    // Request execution and get future
     const future = kernel.requestExecute({
       code,
       silent: false, // Always false to get output
       store_history: storeHistory,
       user_expressions: {},
       allow_stdin: false,
-    }) as ExecutionFuture;
+    });
 
-    // Handle result asynchronously
+    // Register streaming listener if provided
+    if (onStream) {
+      (future as any).onStream(onStream);
+    }
+
+    // Handle completion and errors
     future.done
       .then(() => {
-        onComplete(future.result);
+        onComplete((future as any).result);
       })
       .catch((error) => {
-        logError(
-          `Execution rejected on kernel: ${kernelId}, msg_id: ${future.msg.header.msg_id}`,
-          error,
-        );
+        logError(`Execution error on kernel: ${kernelId}`, error);
       });
   }
 
@@ -201,7 +204,9 @@ export class KernelManager {
     // Shutdown all kernels
     const kernelIds = Array.from(this.kernels.keys());
     for (const kernelId of kernelIds) {
-      this.shutdownKernel(kernelId).catch((_error) => {});
+      this.shutdownKernel(kernelId).catch((error) => {
+        logError(`Error shutting down kernel ${kernelId} during disposal: ${error}`, error);
+      });
     }
   }
 }

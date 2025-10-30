@@ -122,6 +122,7 @@ export class RawSocket {
 
       await socket.send(msgParts);
     } catch (error) {
+      logError(`Failed to send message: ${error}`, error);
       if (this.onError) {
         this.onError({ type: "error", error });
       }
@@ -133,15 +134,15 @@ export class RawSocket {
    */
   public close(): void {
     this.readyState = RawSocket.CLOSING;
-    logInfo("Closing RawSocket connections");
+    logDebug("Closing RawSocket connections");
 
     // Close all ZMQ sockets
     Object.values(this.sockets).forEach((socket) => {
       if (socket) {
         try {
           socket.close();
-        } catch {
-          // Ignore close errors
+        } catch (error) {
+          logError(`Error closing socket: ${error}`, error);
         }
       }
     });
@@ -154,7 +155,7 @@ export class RawSocket {
       this.onClose({ type: "close" });
     }
 
-    logInfo("RawSocket connections closed");
+    logDebug("RawSocket connections closed");
   }
 
   // ============================================================================
@@ -180,7 +181,7 @@ export class RawSocket {
       const { ip, transport, shell_port, iopub_port, control_port } =
         this.connectionInfo;
 
-      logInfo(
+      logDebug(
         `Creating sockets at ports ${shell_port}, ${iopub_port}, ${control_port}`,
       );
 
@@ -200,7 +201,7 @@ export class RawSocket {
       );
 
       // Setup message handlers after sockets are created
-      logInfo("Setting up message handlers for sockets");
+      logDebug("Setting up message handlers for sockets");
       this.setupMessageHandlers();
 
       this.isConnected = true;
@@ -214,9 +215,10 @@ export class RawSocket {
       // Send any pending messages
       this.processPendingMessages();
 
-      logInfo("Connection established");
+      logDebug("RawSocket connection established");
     } catch (error) {
       this.readyState = RawSocket.CLOSED;
+      logError(`Failed to connect RawSocket: ${error}`, error);
 
       if (this.onError) {
         this.onError({ type: "error", error });
@@ -268,8 +270,8 @@ export class RawSocket {
           if (this.onMessage) {
             this.onMessage(wsMessage);
           }
-        } catch {
-          // Ignore parse errors
+        } catch (error) {
+          logError(`Failed to parse message on ${channel} channel: ${error}`, error);
         }
       }
     } catch (error) {

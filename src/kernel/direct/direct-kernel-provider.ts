@@ -190,7 +190,9 @@ export class DirectKernelProvider implements IKernelProvider {
       },
       onExit: () => {
         // Cleanup on exit
-        this.dispose(kernelId).catch(() => {});
+        this.dispose(kernelId).catch((error) => {
+          logError(`Error during kernel disposal on exit: ${error}`, error);
+        });
       },
       onStdout: () => {},
       onStderr: () => {},
@@ -305,8 +307,8 @@ export class DirectKernelProvider implements IKernelProvider {
     if (fs.existsSync(metadata.connectionFilePath)) {
       try {
         fs.unlinkSync(metadata.connectionFilePath);
-      } catch {
-        // Ignore cleanup errors
+      } catch (error) {
+        logError(`Failed to delete connection file: ${error}`, error);
       }
     }
 
