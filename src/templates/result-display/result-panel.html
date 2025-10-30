@@ -12,7 +12,7 @@
         padding: 0;
         margin: 0;
         background-color: var(--vscode-editor-background);
-        color: var(--vscode-editor-foreground);
+        color: var(--vscode-foreground);
         overflow-x: hidden;
       }
 
@@ -96,45 +96,45 @@
       }
 
       .checkmark {
-        color: var(--vscode-terminal-ansiGreen);
+        color: var(--vscode-editor-foreground);
         font-weight: bold;
       }
 
       pre {
-          overflow-x: auto;
-          white-space: pre-wrap;
-          word-wrap: break-word;
-          margin: 0;
-          padding: 0;
-          background: transparent;
-          flex: 1;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        margin: 0;
+        padding: 0;
+        background: transparent;
+        flex: 1;
       }
 
       .error-text {
-          color: var(--vscode-errorForeground);
-          font-weight: 600;
+        color: var(--vscode-errorForeground);
+        font-weight: 600;
       }
 
       .output-text {
-          color: var(--vscode-terminal-ansiGreen);
+        color: var(--vscode-editor-foreground);
       }
 
       .empty-state {
-          text-align: center;
-          padding: 40px 20px;
-          color: var(--vscode-descriptionForeground);
-          font-size: 20px;
-          font-weight: bold;
+        text-align: center;
+        padding: 40px 20px;
+        color: var(--vscode-descriptionForeground);
+        font-size: 20px;
+        font-weight: bold;
       }
 
       .empty-state.hidden {
-          display: none;
+        display: none;
       }
 
       .empty-state code {
-          background-color: var(--vscode-textCodeBlock-background);
-          padding: 2px 6px;
-          border-radius: 3px;
+        background-color: var(--vscode-textCodeBlock-background);
+        padding: 2px 6px;
+        border-radius: 3px;
       }
     </style>
     <script nonce="{{nonce}}">

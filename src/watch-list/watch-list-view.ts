@@ -1,7 +1,12 @@
 import * as vscode from "vscode";
 import { WatchExpression } from "../types/watch";
 import { logInfo } from "../utils";
-import { escapeHtml, getNonce, loadTemplate } from "../utils/html-utils";
+import {
+  escapeHtml,
+  getNonce,
+  loadTemplate,
+  stripAnsi,
+} from "../utils/html-utils";
 
 /**
  * Displays watch expressions in a webview panel
@@ -109,29 +114,26 @@ export class WatchListView implements vscode.WebviewViewProvider {
 
     return watches
       .map((w) => {
-        const expr = escapeHtml(w.expression);
-        let valueHtml: string;
+        let resultClass: string;
+        let resultText: string;
+
         if (w.error) {
-          valueHtml = `<div class="watch-error">${escapeHtml(w.error)}</div>`;
+          resultClass = "watch-error";
+          resultText = escapeHtml(stripAnsi(w.error));
         } else if (w.value !== undefined) {
-          valueHtml = `<div class="watch-value">${escapeHtml(w.value)}</div>`;
+          resultClass = "watch-value";
+          resultText = escapeHtml(stripAnsi(w.value));
         } else {
-          valueHtml = '<div class="watch-pending">Not evaluated yet</div>';
+          resultClass = "watch-pending";
+          resultText = "Not evaluated yet";
         }
 
-        return `
-          <div class="watch-item">
-            <div class="watch-header">
-              <div class="watch-expr">${expr}</div>
-              <button class="action-btn refresh-btn" data-id="${w.id}" title="Refresh">
-                <i class="codicon codicon-refresh"></i>
-              </button>
-              <button class="action-btn delete-btn" data-id="${w.id}" title="Remove">
-                <i class="codicon codicon-close"></i>
-              </button>
-            </div>
-            ${valueHtml}
-          </div>`;
+        return loadTemplate("templates/watch-list/watch-item.html", {
+          id: w.id,
+          expression: escapeHtml(w.expression),
+          resultClass,
+          resultText,
+        });
       })
       .join("");
   }
