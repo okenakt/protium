@@ -3,19 +3,19 @@ import { ExecutionResult } from "../types";
 import { logInfo } from "../utils";
 import { escapeHtml, loadTemplate, stripAnsi } from "../utils/html-utils";
 import { getActiveDocumentUri, getFileNameFromUri } from "../utils/vscode-apis";
-import { ResultPanel } from "./result-panel";
+import { ResultDisplayPanel } from "./result-display-panel";
 
 /**
- * DisplayManager manages result display and coordinates with result panel
+ * ResultDisplayManager manages result display and coordinates with result panel
  */
-export class DisplayManager {
-  private resultPanel: ResultPanel;
+export class ResultDisplayManager {
+  private resultPanel: ResultDisplayPanel;
   // fileUri -> Range -> content (HTML string)
   private contentBlocks: Map<string, Map<vscode.Range, string>> = new Map();
   private lastActiveFileUri: string | undefined;
 
   constructor() {
-    this.resultPanel = new ResultPanel(async () => {
+    this.resultPanel = new ResultDisplayPanel(async () => {
       if (this.lastActiveFileUri) {
         await this.restoreResults(this.lastActiveFileUri);
       }
@@ -95,7 +95,7 @@ export class DisplayManager {
   }
 
   /**
-   * Display execution result in the result panel
+   * Display execution result in the panel
    * @param fileUri File URI
    * @param range Line range
    * @param result Execution result to display
@@ -110,7 +110,7 @@ export class DisplayManager {
     );
 
     // Load result block template and replace placeholders
-    const block = loadTemplate("templates/result-panel/result-block.html", {
+    const block = loadTemplate("templates/result-display/result-block.html", {
       lineStart: range.start.line.toString(),
       lineEnd: range.end.line.toString(),
       content: this.formatResultAsHtml(result),
@@ -130,7 +130,7 @@ export class DisplayManager {
     );
 
     // Load result block template and replace placeholders
-    const block = loadTemplate("templates/result-panel/loading-block.html", {
+    const block = loadTemplate("templates/result-display/loading-block.html", {
       lineStart: range.start.line.toString(),
       lineEnd: range.end.line.toString(),
     });

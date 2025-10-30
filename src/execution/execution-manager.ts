@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { KernelManager } from "../kernel";
 import { KernelMonitor } from "../kernel-monitor";
-import { DisplayManager } from "../result-panel";
+import { ResultDisplayManager } from "../result-display";
 import { KernelExecInfo } from "../types/kernel";
 import { logInfo, logWarn } from "../utils";
 import {
@@ -17,18 +17,18 @@ import { BlockDetector } from "./";
 export class ExecutionManager {
   private blockDetector: BlockDetector;
   private kernelManager: KernelManager;
-  private displayManager: DisplayManager;
+  private resultDisplayManager: ResultDisplayManager;
   private kernelMonitor: KernelMonitor;
   private watchListManager: WatchListManager;
   private sessions: Map<string, string> = new Map();
 
   constructor(
-    displayManager: DisplayManager,
+    resultDisplayManager: ResultDisplayManager,
     kernelMonitor: KernelMonitor,
     watchListManager: WatchListManager,
   ) {
     this.blockDetector = new BlockDetector();
-    this.displayManager = displayManager;
+    this.resultDisplayManager = resultDisplayManager;
     this.kernelManager = new KernelManager();
     this.kernelMonitor = kernelMonitor;
     this.watchListManager = watchListManager;
@@ -115,7 +115,7 @@ export class ExecutionManager {
     this.updateKernelMonitor();
 
     // Show loading animation
-    this.displayManager.displayExecutionLoading(fileUri, codeRange);
+    this.resultDisplayManager.displayExecutionLoading(fileUri, codeRange);
 
     // Execute code on kernel
     this.kernelManager.requestExecution(
@@ -123,7 +123,7 @@ export class ExecutionManager {
       code,
       (result) => {
         // Display result
-        this.displayManager.displayResult(fileUri, codeRange, result);
+        this.resultDisplayManager.displayResult(fileUri, codeRange, result);
 
         // Auto-refresh watch list for this file after successful execution
         if (result.status === "ok") {
@@ -330,7 +330,7 @@ export class ExecutionManager {
       const sessionEntries = Array.from(this.sessions.entries());
       for (const [uri, id] of sessionEntries) {
         if (id === kernelId) {
-          this.displayManager.clearResults(uri);
+          this.resultDisplayManager.clearResults(uri);
           this.sessions.delete(uri);
         }
       }
@@ -353,7 +353,7 @@ export class ExecutionManager {
     }
 
     const fileUri = editor.document.uri.toString();
-    this.displayManager.clearResults(fileUri);
+    this.resultDisplayManager.clearResults(fileUri);
   }
 
   /**
@@ -485,7 +485,7 @@ export class ExecutionManager {
   }
 
   dispose(): void {
-    this.displayManager.dispose();
+    this.resultDisplayManager.dispose();
     this.kernelManager.dispose();
     // KernelMonitor (WebviewView) is managed by VS Code, no disposal needed
     this.sessions.clear();

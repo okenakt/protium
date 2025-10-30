@@ -1,12 +1,12 @@
 import * as vscode from "vscode";
 import { logInfo } from "../utils";
-import { loadTemplate } from "../utils/html-utils";
+import { getNonce, loadTemplate } from "../utils/html-utils";
 import { getActiveEditor, getLineHeight } from "../utils/vscode-apis";
 
 /**
- * ResultPanel manages the webview panel for displaying execution results
+ * ResultDisplayPanel manages the webview panel for displaying execution results.
  */
-export class ResultPanel {
+export class ResultDisplayPanel {
   private panel: vscode.WebviewPanel | undefined;
   private scrollSyncEnabled: boolean = true;
   private onVisible: (() => void) | undefined;
@@ -25,13 +25,14 @@ export class ResultPanel {
 
   /**
    * Check panel is visible or not
+   * @returns True if panel exists and is visible
    */
   isVisible(): boolean {
     return this.panel !== undefined && this.panel.visible;
   }
 
   /**
-   * Ensure panel exists, creating it if necessary
+   * Ensures panel exists, creating it if necessary.
    * @returns True if new panel was created
    */
   async ensurePanel(): Promise<boolean> {
@@ -86,16 +87,21 @@ export class ResultPanel {
     }
 
     const lineHeight = getLineHeight();
+    const nonce = getNonce();
     logInfo(`Generate base HTML with lineHeight: ${lineHeight}`);
 
-    const baseHTML = loadTemplate("templates/result-panel/result-panel.html", {
-      lineHeight: lineHeight,
-    });
+    const baseHTML = loadTemplate(
+      "templates/result-display/result-panel.html",
+      {
+        lineHeight: lineHeight,
+        nonce: nonce,
+      },
+    );
     this.panel.webview.html = baseHTML;
   }
 
   /**
-   * Set breadcrumb text via postMessage
+   * Set breadcrumb text via postMessage.
    * @param text Text to display in breadcrumb
    */
   async setBreadcrumb(text: string): Promise<void> {
@@ -111,7 +117,7 @@ export class ResultPanel {
   }
 
   /**
-   * Send result blocks to webview via postMessage
+   * Send result blocks to webview via postMessage.
    * @param blocks HTML blocks to display
    */
   async update(blocks: Array<string>): Promise<void> {

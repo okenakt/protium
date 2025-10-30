@@ -1,13 +1,13 @@
 import * as vscode from "vscode";
 import { ExecutionManager } from "./execution";
 import { KernelMonitor } from "./kernel-monitor";
-import { DisplayManager } from "./result-panel";
+import { ResultDisplayManager } from "./result-display";
 import { initializeLogger, logInfo } from "./utils/output-logger";
 import { getActiveEditor, isPythonEditor } from "./utils/vscode-apis";
 import { WatchListManager, WatchListView } from "./watch-list";
 
 let executionManager: ExecutionManager;
-let displayManager: DisplayManager;
+let resultDisplayManager: ResultDisplayManager;
 let watchListManager: WatchListManager;
 
 /**
@@ -28,8 +28,8 @@ function handleActiveEditorChange(editor: vscode.TextEditor | undefined) {
   if (isPython) {
     const fileUri = editor.document.uri.toString();
 
-    // Switch display manager to this file
-    displayManager.switchToFile(fileUri).catch(() => {});
+    // Switch result display manager to this file
+    resultDisplayManager.switchToFile(fileUri).catch(() => {});
 
     // Update watch list manager with active file
     watchListManager.setLastActiveFile(fileUri);
@@ -81,9 +81,9 @@ export function activate(context: vscode.ExtensionContext) {
   });
 
   // Initialize execution manager with dependencies
-  displayManager = new DisplayManager();
+  resultDisplayManager = new ResultDisplayManager();
   executionManager = new ExecutionManager(
-    displayManager,
+    resultDisplayManager,
     kernelMonitor,
     watchListManager,
   );
