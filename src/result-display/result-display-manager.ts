@@ -76,10 +76,10 @@ export class ResultDisplayManager {
     // Store HTML mapping
     this.storeContentBlock(fileUri, range, block);
 
-    // Check if active editor matches the fileUri
-    const activeFileUri = getActiveDocumentUri();
-    if (activeFileUri !== fileUri) {
-      logInfo(`Active editor does not match, skipping display update`);
+    // Check if last active file matches the fileUri
+    // This allows updates even when focus moves to another panel
+    if (this.lastActiveFileUri !== fileUri) {
+      logInfo(`Last active file does not match, skipping display update`);
       return;
     }
 
@@ -223,9 +223,8 @@ export class ResultDisplayManager {
     // Remove file from mappings
     this.contentBlocks.delete(fileUri);
 
-    // Check if active editor matches the fileUri
-    const activeFileUri = getActiveDocumentUri();
-    if (activeFileUri !== fileUri) {
+    // Check if last active file matches the fileUri
+    if (this.lastActiveFileUri !== fileUri) {
       return;
     }
 
