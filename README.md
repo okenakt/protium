@@ -1,71 +1,52 @@
-# Protium README
+# Protium
 
-This is the README for your extension "protium". After writing up a brief description, we recommend including the following sections.
+Interactive Python environment for VS Code with flexible execution in your workflow.
+
+![Protium Screenshot](images/screenshot.png)
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+- **Flexible execution**: Run exactly what you need — a single line, a code block, or a selection
+- **Results that follow you**: View plots, images, and DataFrames that update as you switch files
+- **Session control**: Connect files to different kernels or share a kernel across multiple files
+- **Kernel monitor**: Track execution status, counts, and connected files in real-time
+- **Watch list**: Automatically evaluate expressions after each execution
 
-For example if there is an image subfolder under your extension project workspace:
+## Getting Started
 
-\!\[feature X\]\(images/feature-x.png\)
+1. Install the extension from VS Code Marketplace
+2. Open a Python file (`.py`)
+3. Place cursor on code you want to execute
+4. Press `Shift+Enter` to execute
+5. View results in the "Protium Results" panel
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+_Note: If `ipykernel` is not installed, Protium will prompt you to install it automatically._
 
-## Requirements
+## Commands
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+| Command                    | Description                          | Keybinding       |
+| -------------------------- | ------------------------------------ | ---------------- |
+| Execute and Move Next      | Execute code block and move to next  | `Shift+Enter`    |
+| Execute in Place           | Execute code block without moving    | `Ctrl+Enter`     |
+| Interrupt Execution        | Stop currently running code          | `Ctrl+Shift+C`   |
+| Clear Results              | Clear results for current file       | `Ctrl+Backspace` |
+| Connect to Existing Kernel | Connect current file to a kernel     | —                |
+| Restart Kernel             | Restart the kernel for current file  | —                |
+| Shutdown Kernel            | Shutdown the kernel for current file | —                |
+| Show Kernel Monitor        | Open the Kernel Monitor panel        | —                |
+| Show Watch List            | Open the Watch List sidebar          | —                |
 
-## Extension Settings
+## Settings
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+- `protium.resultDisplay.maxLines`: Maximum number of lines to display in result blocks (default: 20)
 
-For example:
+## Documentation
 
-This extension contributes the following settings:
+- [Design Document](docs/design.md): System architecture and design philosophy
+- [Features Specification](docs/features.md): Detailed feature requirements
+- [Development Guide](docs/development.md): Setup and coding conventions
+- [Change Log](CHANGELOG.md): Release history and version notes
 
-- `myExtension.enable`: Enable/disable this extension.
-- `myExtension.thing`: Set to `blah` to do something.
+## License
 
-## Known Issues
-
-Calling out known issues can help limit users opening duplicate issues against your extension.
-
-## Release Notes
-
-Users appreciate release notes as you update your extension.
-
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
-
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-- [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-- Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-- Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-- Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-- [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-- [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+See [LICENSE](LICENSE) file for details.
