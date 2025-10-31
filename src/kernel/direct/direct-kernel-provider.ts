@@ -13,8 +13,8 @@ import {
   DirectKernelMetadata,
   IKernelProvider,
   KernelConnectionInfo,
-  KernelProvideOptions,
 } from "../../types/kernel";
+import { PythonEnvironment } from "../../types/interpreter";
 import { logDebug, logError, logInfo, logWarn } from "../../utils";
 import { findConsecutiveAvailablePorts } from "../../utils/port-finder";
 import { DirectKernelConnection } from "./direct-kernel-connection";
@@ -99,19 +99,24 @@ export class DirectKernelProvider implements IKernelProvider {
    * Generate Jupyter connection file
    * @param kernelId Kernel ID
    * @param filePath Path to write connection file
+   * @param pythonEnv Python environment info for kernel name
    * @returns Kernel connection info
    */
   private async generateConnectionInfo(
     kernelId: string,
     filePath: string,
+    pythonEnv?: PythonEnvironment,
   ): Promise<KernelConnectionInfo> {
     // Allocate 5 consecutive ports for kernel channels
     const portsNeeded = 5;
     const basePort = await findConsecutiveAvailablePorts(portsNeeded);
 
+    // Use display name from environment info, or fallback to default
+    const kernelName = pythonEnv?.displayName || "Python";
+
     const connectionInfo: KernelConnectionInfo = {
       kernel_id: kernelId,
-      kernel_name: "protium-python",
+      kernel_name: kernelName,
       transport: "tcp",
       shell_port: basePort,
       iopub_port: basePort + 1,
@@ -163,26 +168,26 @@ export class DirectKernelProvider implements IKernelProvider {
   /**
    * Launch kernel process and create connection
    * @param kernelId Kernel ID
-   * @param pythonPath Python interpreter path
+   * @param pythonEnv Python environment info
    * @param connectionFilePath Connection file path
    * @param connectionInfo Kernel connection info
    * @returns Kernel connection
    */
   private async launchKernelAndConnect(
     kernelId: string,
-    pythonPath: string,
+    pythonEnv: PythonEnvironment,
     connectionFilePath: string,
     connectionInfo: KernelConnectionInfo,
   ): Promise<Kernel.IKernelConnection> {
     // Ensure ipykernel is installed
-    const ipykernelReady = await this.ensureIpykernelInstalled(pythonPath);
+    const ipykernelReady = await this.ensureIpykernelInstalled(pythonEnv.path);
     if (!ipykernelReady) {
       throw new Error("ipykernel is not available");
     }
 
     // Launch kernel process
     logInfo(`Launching kernel process for kernel: ${kernelId}`);
-    const process = launchIpykernel(pythonPath, connectionFilePath, {
+    const process = launchIpykernel(pythonEnv.path, connectionFilePath, {
       onError: (error) => {
         vscode.window.showErrorMessage(
           `Kernel process failed: ${error.message}`,
@@ -202,7 +207,7 @@ export class DirectKernelProvider implements IKernelProvider {
     this.kernelMetadata.set(kernelId, {
       process,
       connectionFilePath,
-      pythonPath,
+      pythonEnv,
     });
 
     // Create kernel connection
@@ -226,28 +231,22 @@ export class DirectKernelProvider implements IKernelProvider {
 
   /**
    * Provide a kernel connection by starting a new local Python process
-   * @param options Kernel provision options
+   * @param pythonEnv Python environment to use for kernel
    * @returns Kernel connection
    */
-  async provide(
-    options: KernelProvideOptions,
-  ): Promise<Kernel.IKernelConnection> {
-    const pythonPath = options.pythonPath;
-    if (!pythonPath) {
-      throw new Error("Python interpreter path is not specified");
-    }
-
+  async provide(pythonEnv: PythonEnvironment): Promise<Kernel.IKernelConnection> {
     // Generate kernel ID and connection info
     const kernelId = uuidv4();
     const filePath = path.join(this.tempDir, `kernel-${kernelId}.json`);
     const connectionInfo = await this.generateConnectionInfo(
       kernelId,
       filePath,
+      pythonEnv,
     );
 
     return this.launchKernelAndConnect(
       kernelId,
-      pythonPath,
+      pythonEnv,
       filePath,
       connectionInfo,
     );
@@ -265,7 +264,7 @@ export class DirectKernelProvider implements IKernelProvider {
       throw new Error(`Kernel metadata for ${kernelId} not found`);
     }
 
-    const pythonPath = metadata.pythonPath;
+    const pythonEnv = metadata.pythonEnv;
 
     // Dispose old kernel resources
     await this.dispose(kernelId);
@@ -275,11 +274,12 @@ export class DirectKernelProvider implements IKernelProvider {
     const connectionInfo = await this.generateConnectionInfo(
       kernelId,
       filePath,
+      pythonEnv,
     );
 
     return this.launchKernelAndConnect(
       kernelId,
-      pythonPath,
+      pythonEnv,
       filePath,
       connectionInfo,
     );

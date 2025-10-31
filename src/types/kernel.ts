@@ -1,4 +1,5 @@
 import { Kernel } from "@jupyterlab/services";
+import { PythonEnvironment } from "./interpreter";
 
 /**
  * Kernel execution information including session data
@@ -30,21 +31,11 @@ export interface KernelConnectionInfo {
 }
 
 /**
- * Options for kernel provider
- */
-export interface KernelProvideOptions {
-  /** Kernel name (e.g., "python3") */
-  kernelName?: string;
-  /** Path to Python interpreter */
-  pythonPath?: string;
-}
-
-/**
  * Kernel provider interface
  * Abstracts kernel connection establishment
  */
 export interface IKernelProvider {
-  provide(options: KernelProvideOptions): Promise<Kernel.IKernelConnection>;
+  provide(pythonEnv: PythonEnvironment): Promise<Kernel.IKernelConnection>;
   restart(kernelId: string): Promise<Kernel.IKernelConnection>;
   dispose(kernelId: string): Promise<void>;
 }
@@ -55,7 +46,7 @@ export interface IKernelProvider {
 export interface DirectKernelMetadata {
   process: any;
   connectionFilePath: string;
-  pythonPath: string;
+  pythonEnv: PythonEnvironment;
 }
 
 /**

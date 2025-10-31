@@ -1,4 +1,15 @@
 /**
+ * Python environment information
+ */
+export interface PythonEnvironment {
+  path: string;
+  displayName: string;
+  version?: string;
+  envName?: string;
+  envType?: string;
+}
+
+/**
  * Result of ipykernel availability check
  */
 export interface IpykernelCheckResult {

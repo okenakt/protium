@@ -1,6 +1,6 @@
 import { Kernel } from "@jupyterlab/services";
 import * as vscode from "vscode";
-import { getPythonInterpreter } from "../interpreter";
+import { getPythonEnvironment } from "../interpreter";
 import { ExecutionResult } from "../types";
 import { logError, logInfo } from "../utils";
 import { DirectKernelProvider } from "./direct";
@@ -65,16 +65,17 @@ export class KernelManager {
    * @returns Kernel connection or undefined
    */
   async startDirectKernel(): Promise<Kernel.IKernelConnection | undefined> {
-    const pythonPath = await getPythonInterpreter();
-    if (!pythonPath) {
+    // Get Python environment
+    const pythonEnv = await getPythonEnvironment();
+    if (!pythonEnv) {
       vscode.window.showErrorMessage("No Python interpreter found");
       return undefined;
     }
 
-    logInfo(`Starting direct kernel with Python: ${pythonPath}`);
+    logInfo(`Starting direct kernel with: ${pythonEnv.displayName}`);
 
     // Use provider to provide kernel connection
-    const kernel = await this.provider.provide({ pythonPath });
+    const kernel = await this.provider.provide(pythonEnv);
 
     // Cache the kernel
     this.kernels.set(kernel.id, kernel);
