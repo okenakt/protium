@@ -1,6 +1,6 @@
 import * as crypto from "crypto";
 import { JupyterMessage, KernelConnectionInfo } from "../../types";
-import { logDebug, logError, logInfo } from "../../utils";
+import { logDebug, logError } from "../../utils";
 
 // ZMQ types - will be dynamically imported to avoid bundling issues
 let zmq: any;
@@ -271,7 +271,10 @@ export class RawSocket {
             this.onMessage(wsMessage);
           }
         } catch (error) {
-          logError(`Failed to parse message on ${channel} channel: ${error}`, error);
+          logError(
+            `Failed to parse message on ${channel} channel: ${error}`,
+            error,
+          );
         }
       }
     } catch (error) {
