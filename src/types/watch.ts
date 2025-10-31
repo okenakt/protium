@@ -10,6 +10,8 @@ export interface WatchExpression {
   filePath: string;
   /** Current value (result of evaluation) */
   value?: string;
+  /** MIME data from execution result (for rich display like HTML tables) */
+  mimeData?: Record<string, string>;
   /** Error message if evaluation failed */
   error?: string;
   /** Timestamp of last evaluation */

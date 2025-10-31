@@ -7,6 +7,8 @@ import {
   loadTemplate,
   stripAnsi,
 } from "../utils/html-utils";
+import { renderResultAsHtml, isRichResult } from "../utils/result-renderer";
+import { getLineHeight } from "../utils/vscode-apis";
 
 /**
  * Displays watch expressions in a webview panel
@@ -115,25 +117,49 @@ export class WatchListView implements vscode.WebviewViewProvider {
     return watches
       .map((w) => {
         let resultClass: string;
-        let resultText: string;
+        let resultHtml: string;
 
         if (w.error) {
           resultClass = "watch-error";
-          resultText = escapeHtml(stripAnsi(w.error));
+          resultHtml = `<pre class="${resultClass}">${escapeHtml(stripAnsi(w.error))}</pre>`;
         } else if (w.value !== undefined) {
-          resultClass = "watch-value";
-          resultText = escapeHtml(stripAnsi(w.value));
+          // Use common result renderer
+          const rendered = renderResultAsHtml(w.mimeData, w.value);
+          if (rendered) {
+            resultClass = "watch-value";
+            // If it's rich HTML (images, tables, etc.), wrap in div
+            // Otherwise it's already wrapped in <pre> by renderResultAsHtml
+            if (isRichResult(w.mimeData)) {
+              resultHtml = `<div class="${resultClass}">${rendered}</div>`;
+            } else {
+              // Already has <pre> tag with escaped content
+              // Just add the class to the existing pre tag
+              resultHtml = rendered.replace('<pre>', `<pre class="${resultClass}">`);
+            }
+          } else {
+            resultClass = "watch-value";
+            resultHtml = `<pre class="${resultClass}">No output</pre>`;
+          }
         } else {
           resultClass = "watch-pending";
-          resultText = "Not evaluated yet";
+          resultHtml = `<pre class="${resultClass}">Not evaluated yet</pre>`;
         }
 
-        return loadTemplate("templates/watch-list/watch-item.html", {
-          id: w.id,
-          expression: escapeHtml(w.expression),
-          resultClass,
-          resultText,
-        });
+        // Build HTML manually to handle both pre and div content
+        return `<div class="watch-item">
+  <div class="watch-header">
+    <div class="watch-expr">${escapeHtml(w.expression)}</div>
+    <button class="action-btn refresh-btn" data-id="${w.id}" title="Refresh">
+      <i class="codicon codicon-refresh"></i>
+    </button>
+    <button class="action-btn delete-btn" data-id="${w.id}" title="Remove">
+      <i class="codicon codicon-trash"></i>
+    </button>
+  </div>
+  <div class="watch-result">
+    ${resultHtml}
+  </div>
+</div>`;
       })
       .join("");
   }
@@ -200,6 +226,7 @@ export class WatchListView implements vscode.WebviewViewProvider {
 
     const webview = this.view.webview;
     const nonce = getNonce();
+    const lineHeight = getLineHeight();
 
     const codiconsUri = webview.asWebviewUri(
       vscode.Uri.joinPath(
@@ -216,10 +243,11 @@ export class WatchListView implements vscode.WebviewViewProvider {
       nonce,
       cspSource: webview.cspSource,
       codiconsUri: codiconsUri.toString(),
+      lineHeight: lineHeight,
     });
 
     this.initialized = true;
 
-    logInfo("Watch list view initialized");
+    logInfo(`Watch list view initialized with lineHeight: ${lineHeight}`);
   }
 }

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; style-src {{cspSource}} 'unsafe-inline'; font-src {{cspSource}}; script-src 'nonce-{{nonce}}';"
+      content="default-src 'none'; style-src {{cspSource}} 'unsafe-inline'; font-src {{cspSource}}; img-src data: https:; script-src 'nonce-{{nonce}}';"
     />
     <link href="{{codiconsUri}}" rel="stylesheet" />
     <style>
@@ -132,9 +132,39 @@
         border-right: 3px solid var(--vscode-focusBorder);
         border-top: 2px solid var(--vscode-panel-border);
         border-bottom: 2px solid var(--vscode-panel-border);
-        padding: 4px 8px;
+        line-height: {{lineHeight}}px;
+        min-height: {{lineHeight}}px;
+        padding: 0 4px;
         overflow: auto;
-        font-size: 0.9em;
+        display: flex;
+        align-items: center;
+      }
+
+      .watch-result pre {
+        margin: 0;
+        padding: 0;
+        background: transparent;
+        flex: 1;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+      }
+
+      .watch-result div {
+        margin: 0;
+        padding: 0;
+        background: transparent;
+        flex: 1;
+        overflow-x: auto;
+      }
+
+      .watch-result img,
+      .watch-result svg {
+        max-width: 100%;
+        height: auto;
+        width: auto;
+        object-fit: contain;
+        display: block;
+        margin: 4px 0;
       }
 
       .watch-value {

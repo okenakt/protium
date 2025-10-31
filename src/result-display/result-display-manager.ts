@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { ExecutionResult } from "../types";
 import { logInfo } from "../utils";
 import { escapeHtml, loadTemplate, stripAnsi } from "../utils/html-utils";
+import { renderResultAsHtml } from "../utils/result-renderer";
 import { getActiveDocumentUri, getFileNameFromUri } from "../utils/vscode-apis";
 import { ResultDisplayPanel } from "./result-display-panel";
 
@@ -165,7 +166,7 @@ export class ResultDisplayManager {
 
     // Handle mime data (images, plots, etc.)
     if (result.mimeData) {
-      const mimeHtml = this.formatMimeData(result.mimeData);
+      const mimeHtml = renderResultAsHtml(result.mimeData);
       if (mimeHtml) return mimeHtml;
     }
 
@@ -185,40 +186,6 @@ export class ResultDisplayManager {
     }
 
     return "";
-  }
-
-  /**
-   * Format mime data with priority order
-   * @param mimeData Mime data record from kernel
-   * @returns HTML string or null if no supported mime type
-   */
-  private formatMimeData(mimeData: Record<string, string>): string | null {
-    // Image formats
-    if (mimeData["image/png"]) {
-      return `<img src="data:image/png;base64,${mimeData["image/png"]}" />`;
-    }
-    if (mimeData["image/svg+xml"]) {
-      const svgData = mimeData["image/svg+xml"];
-      if (typeof svgData === "string" && svgData.startsWith("<svg")) {
-        return svgData;
-      }
-      return `<img src="data:image/svg+xml;base64,${svgData}" />`;
-    }
-    if (mimeData["image/jpeg"]) {
-      return `<img src="data:image/jpeg;base64,${mimeData["image/jpeg"]}" />`;
-    }
-
-    // Rich HTML (e.g., pandas DataFrames)
-    if (mimeData["text/html"]) {
-      return mimeData["text/html"];
-    }
-
-    // Plain text fallback
-    if (mimeData["text/plain"]) {
-      return this.wrapInPre(mimeData["text/plain"], "output-text");
-    }
-
-    return null;
   }
 
   /**

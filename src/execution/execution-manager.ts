@@ -434,6 +434,7 @@ export class ExecutionManager {
       this.watchListManager.updateWatchValue(
         watchId,
         undefined,
+        undefined,
         "No kernel running for this file",
       );
       return;
@@ -450,6 +451,7 @@ export class ExecutionManager {
         if (result.error) {
           this.watchListManager.updateWatchValue(
             watchId,
+            undefined,
             undefined,
             result.error,
           );
@@ -468,7 +470,11 @@ export class ExecutionManager {
             return;
           }
 
-          this.watchListManager.updateWatchValue(watchId, value);
+          this.watchListManager.updateWatchValue(
+            watchId,
+            value,
+            result.mimeData,
+          );
         }
       },
       false, // Don't store in history to avoid incrementing execution count

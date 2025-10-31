@@ -45,16 +45,19 @@ export class WatchListManager {
    * Updates the value of a watch expression
    * @param id Watch expression ID
    * @param value Evaluated value
+   * @param mimeData MIME data from execution result
    * @param error Error message if evaluation failed
    */
   public updateWatchValue(
     id: string,
     value?: string,
+    mimeData?: Record<string, string>,
     error?: string,
   ): void {
     const watch = this.watches.get(id);
     if (watch) {
       watch.value = value;
+      watch.mimeData = mimeData;
       watch.error = error;
       watch.lastEvaluated = new Date();
       this.notifyUpdate();
