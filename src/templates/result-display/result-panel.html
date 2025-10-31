@@ -45,13 +45,14 @@
         right: 16px;
         top: calc(var(--line-start) * {{lineHeight}}px);
         min-height: calc((var(--line-end) - var(--line-start) + 1) * {{lineHeight}}px);
+        max-height: calc({{maxLines}} * {{lineHeight}}px);
         background-color: var(--vscode-editor-lineHighlightBackground);
         border-left: 3px solid var(--vscode-focusBorder);
         border-right: 3px solid var(--vscode-focusBorder);
         border-top: 2px solid var(--vscode-panel-border);
         border-bottom: 2px solid var(--vscode-panel-border);
         line-height: {{lineHeight}}px;
-        padding: 0 8px;
+        padding: 0 4px;
         display: flex;
         align-items: flex-start;
         overflow: auto;
@@ -60,7 +61,10 @@
       .result-block img,
       .result-block svg {
         max-width: 100%;
+        max-height: calc({{maxLines}} * {{lineHeight}}px - 16px);
         height: auto;
+        width: auto;
+        object-fit: contain;
         display: block;
         margin: 4px 0;
       }

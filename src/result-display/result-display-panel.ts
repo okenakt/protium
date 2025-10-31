@@ -87,13 +87,19 @@ export class ResultDisplayPanel {
     }
 
     const lineHeight = getLineHeight();
+    const maxLines = vscode.workspace
+      .getConfiguration("protium")
+      .get<number>("resultDisplay.maxLines", 30);
     const nonce = getNonce();
-    logInfo(`Generate base HTML with lineHeight: ${lineHeight}`);
+    logInfo(
+      `Generate base HTML with lineHeight: ${lineHeight}, maxLines: ${maxLines}`,
+    );
 
     const baseHTML = loadTemplate(
       "templates/result-display/result-panel.html",
       {
         lineHeight: lineHeight,
+        maxLines: maxLines,
         nonce: nonce,
       },
     );
