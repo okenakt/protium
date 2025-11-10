@@ -4,19 +4,6 @@ import * as vscode from "vscode";
  * BlockDetector detects Python code blocks
  */
 export class BlockDetector {
-  private readonly blockStartPatterns = [
-    /^\s*@\w+/, // Decorator
-    /^\s*(def\s+\w+)/, // Function definition
-    /^\s*(class\s+\w+)/, // Class definition
-    /^\s*(if\s+.+:)/, // If statement
-    /^\s*(for\s+.+:)/, // For loop
-    /^\s*(while\s+.+:)/, // While loop
-    /^\s*(with\s+.+:)/, // With statement
-    /^\s*(try\s*:)/, // Try block
-    /^\s*(async\s+)/, // Async keyword (async def, async for, async with)
-    /^\s*(match\s+.+:)/, // Match statement
-  ];
-
   private readonly skipPatterns = [
     /^\s*$/, // Empty line
     /^\s*#/, // Comment line
@@ -92,48 +79,70 @@ export class BlockDetector {
     startLine: number,
   ): number {
     const startLineText = document.lineAt(startLine).text;
-
-    // Check if this line starts a block
-    const isBlock = this.blockStartPatterns.some((pattern) =>
-      pattern.test(startLineText),
-    );
-
-    // If not a block start, return the start line itself
-    if (!isBlock) {
-      return startLine;
-    }
-
     const startIndent = this.getIndentLevel(startLineText);
     let lastBlockLine = startLine;
+    let unclosedBrackets = this.countBrackets(startLineText);
+    let prevUnclosedBrackets = unclosedBrackets;
 
     for (let line = startLine + 1; line < document.lineCount; line++) {
       const lineText = document.lineAt(line).text;
-      const indent = this.getIndentLevel(lineText);
+      const prevLineText = document.lineAt(line - 1).text;
 
-      // Skip empty lines and comments
+      prevUnclosedBrackets = unclosedBrackets;
+      unclosedBrackets += this.countBrackets(lineText);
+
+      // === Force continuation ===
+
+      // 1. Backslash continuation
+      if (this.endsWithBackslash(prevLineText)) {
+        if (!this.shouldSkipLine(lineText)) {
+          lastBlockLine = line;
+        }
+        continue;
+      }
+
+      // 2. Inside bracket continuation (brackets were already open)
+      if (unclosedBrackets > 0 && prevUnclosedBrackets > 0) {
+        if (!this.shouldSkipLine(lineText)) {
+          lastBlockLine = line;
+        }
+        continue;
+      }
+
+      // 3. Skip lines (empty lines and comments) - defer judgment
       if (this.shouldSkipLine(lineText)) {
         continue;
       }
 
-      // Less indent - block ends
+      // === Termination check ===
+
+      const indent = this.getIndentLevel(lineText);
+
+      // 4. Shallower indentation - block ends
       if (indent < startIndent) {
         break;
       }
 
-      // Deeper indent - inside the block
-      if (indent > startIndent) {
-        lastBlockLine = line;
-        continue;
+      // 5. Same indentation
+      if (indent === startIndent) {
+        // 5a. Bracket just closed on this line (e.g., `):`  in `def func():`)
+        if (prevUnclosedBrackets > 0 && unclosedBrackets === 0) {
+          lastBlockLine = line;
+          continue;
+        }
+
+        // 5b. Continuation keyword (elif, else, except, etc.)
+        if (this.isContinuationKeyword(lineText, startLineText)) {
+          lastBlockLine = line;
+          continue;
+        }
+
+        // Otherwise (including new statement with opening bracket) - block ends
+        break;
       }
 
-      // Same indent - check if continuation keyword
-      if (this.isContinuationKeyword(lineText, startLineText)) {
-        lastBlockLine = line;
-        continue;
-      }
-
-      // Not a continuation - block ends here
-      break;
+      // 6. Deeper indentation - continue
+      lastBlockLine = line;
     }
 
     return lastBlockLine;
@@ -174,5 +183,39 @@ export class BlockDetector {
       }
     }
     return indent;
+  }
+
+  /**
+   * Checks if line ends with backslash continuation
+   * @param line Line text to check
+   * @returns True if line ends with backslash
+   */
+  private endsWithBackslash(line: string): boolean {
+    return line.trimEnd().endsWith("\\");
+  }
+
+  /**
+   * Counts unclosed brackets in a line, ignoring brackets inside strings and comments
+   * @param line Line text to analyze
+   * @returns Net count of unclosed brackets (positive means more opening brackets)
+   */
+  private countBrackets(line: string): number {
+    // Remove strings and comments to avoid counting brackets inside them
+    const cleaned = line
+      .replace(/"""[\s\S]*?"""/g, '""') // Triple double quotes (single line)
+      .replace(/'''[\s\S]*?'''/g, "''") // Triple single quotes (single line)
+      .replace(/"(?:[^"\\]|\\.)*"/g, '""') // Double quoted strings
+      .replace(/'(?:[^'\\]|\\.)*'/g, "''") // Single quoted strings
+      .replace(/#.*$/, ""); // Comments
+
+    let count = 0;
+    for (const char of cleaned) {
+      if (char === "(" || char === "[" || char === "{") {
+        count++;
+      } else if (char === ")" || char === "]" || char === "}") {
+        count--;
+      }
+    }
+    return count;
   }
 }
