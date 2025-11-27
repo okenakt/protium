@@ -3,7 +3,11 @@ import { ExecutionResult } from "../types";
 import { logInfo } from "../utils";
 import { escapeHtml, loadTemplate, stripAnsi } from "../utils/html-utils";
 import { renderResultAsHtml } from "../utils/result-renderer";
-import { getActiveDocumentUri, getFileNameFromUri } from "../utils/vscode-apis";
+import {
+  getActiveDocumentUri,
+  getActivePythonEditor,
+  getFileNameFromUri,
+} from "../utils/vscode-apis";
 import { ResultDisplayPanel } from "./result-display-panel";
 
 /**
@@ -20,6 +24,11 @@ export class ResultDisplayManager {
       if (this.lastActiveFileUri) {
         await this.restoreResults(this.lastActiveFileUri);
       }
+    });
+
+    // Track visible range changes (scroll events) and sync only for last active file
+    vscode.window.onDidChangeTextEditorVisibleRanges((event) => {
+      this.syncPanelScroll(event.textEditor);
     });
   }
 
@@ -42,6 +51,21 @@ export class ResultDisplayManager {
 
     const fileBlocks = this.contentBlocks.get(fileUri)!;
     fileBlocks.set(range, block);
+  }
+
+  /**
+   * Sync panel scroll to editor scroll position
+   * @param editor Text editor to sync with
+   */
+  private syncPanelScroll(editor: vscode.TextEditor): void {
+    if (!this.lastActiveFileUri) {
+      return;
+    }
+
+    // Sync only if editor matches last active file
+    if (editor.document.uri.toString() === this.lastActiveFileUri) {
+      this.resultPanel.syncScrollPosition(editor.visibleRanges);
+    }
   }
 
   /**
@@ -92,6 +116,12 @@ export class ResultDisplayManager {
     } else {
       // Panel exists - send only this new result
       await this.resultPanel.update([block]);
+    }
+
+    // Sync scroll if active Python editor matches the last active file
+    const editor = getActivePythonEditor();
+    if (editor) {
+      this.syncPanelScroll(editor);
     }
   }
 
@@ -212,6 +242,12 @@ export class ResultDisplayManager {
     // Clear existing blocks and restore all results for this file
     await this.resultPanel.clearBlocks();
     await this.restoreResults(fileUri);
+
+    // Sync scroll if active Python editor matches the last active file
+    const editor = getActivePythonEditor();
+    if (editor) {
+      this.syncPanelScroll(editor);
+    }
   }
 
   /**

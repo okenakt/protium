@@ -1,26 +1,17 @@
 import * as vscode from "vscode";
 import { logInfo } from "../utils";
 import { getNonce, loadTemplate } from "../utils/html-utils";
-import { getActiveEditor, getLineHeight } from "../utils/vscode-apis";
+import { getLineHeight } from "../utils/vscode-apis";
 
 /**
  * ResultDisplayPanel manages the webview panel for displaying execution results.
  */
 export class ResultDisplayPanel {
   private panel: vscode.WebviewPanel | undefined;
-  private scrollSyncEnabled: boolean = true;
   private onVisible: (() => void) | undefined;
 
   constructor(onVisible: () => void) {
     this.onVisible = onVisible;
-
-    // Track visible range changes (scroll events)
-    vscode.window.onDidChangeTextEditorVisibleRanges((event) => {
-      const activeEditor = getActiveEditor();
-      if (event.textEditor === activeEditor && this.scrollSyncEnabled) {
-        this.syncScrollPosition(event.visibleRanges);
-      }
-    });
   }
 
   /**
@@ -137,12 +128,6 @@ export class ResultDisplayPanel {
       command: "updateBlocks",
       context: blocks,
     });
-
-    // Sync scroll position after update
-    const editor = getActiveEditor();
-    if (this.scrollSyncEnabled && editor && editor.visibleRanges.length > 0) {
-      this.syncScrollPosition(editor.visibleRanges);
-    }
   }
 
   /**
@@ -163,7 +148,7 @@ export class ResultDisplayPanel {
    * Sync panel scroll to editor scroll position
    * @param visibleRanges Currently visible line ranges
    */
-  private syncScrollPosition(visibleRanges: readonly vscode.Range[]): void {
+  syncScrollPosition(visibleRanges: readonly vscode.Range[]): void {
     if (visibleRanges.length === 0 || !this.panel) {
       return;
     }
