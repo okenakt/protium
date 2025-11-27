@@ -47,10 +47,9 @@
         min-height: calc((var(--line-end) - var(--line-start) + 1) * {{lineHeight}}px);
         max-height: calc({{maxLines}} * {{lineHeight}}px);
         background-color: var(--vscode-editor-lineHighlightBackground);
+        border: 2px solid var(--vscode-panel-border);
         border-left: 3px solid var(--vscode-focusBorder);
-        border-right: 3px solid var(--vscode-focusBorder);
-        border-top: 2px solid var(--vscode-panel-border);
-        border-bottom: 2px solid var(--vscode-panel-border);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
         line-height: {{lineHeight}}px;
         padding: 0 4px;
         display: flex;
