@@ -141,7 +141,7 @@ export class ResultDisplayManager {
     );
 
     // Load result block template and replace placeholders
-    const block = loadTemplate("templates/result-display/result-block.html", {
+    const block = loadTemplate("result-display/result-block.html", {
       lineStart: range.start.line.toString(),
       lineEnd: range.end.line.toString(),
       content: this.formatResultAsHtml(result),
@@ -161,7 +161,7 @@ export class ResultDisplayManager {
     );
 
     // Load result block template and replace placeholders
-    const block = loadTemplate("templates/result-display/loading-block.html", {
+    const block = loadTemplate("result-display/loading-block.html", {
       lineStart: range.start.line.toString(),
       lineEnd: range.end.line.toString(),
     });

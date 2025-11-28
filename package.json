@@ -34,7 +34,7 @@
   "activationEvents": [
     "onLanguage:python"
   ],
-  "main": "./out/extension.js",
+  "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
       "panel": [
@@ -158,10 +158,12 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "npm run clean && tsc -p ./ && cp -r src/templates out/",
-    "clean": "rm -rf out",
-    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run package",
+    "compile": "tsc -p ./ && cp -r src/templates out/",
+    "check-types": "tsc --noEmit",
+    "package": "npm run clean && npm run check-types && node esbuild.js --production",
+    "watch": "node esbuild.js --watch",
+    "clean": "rm -rf dist",
     "lint": "eslint src --ext ts",
     "test": "npm run compile && node ./out/test/run-test.js"
   },
@@ -179,6 +181,7 @@
     "@typescript-eslint/eslint-plugin": "^8.18.1",
     "@typescript-eslint/parser": "^8.18.1",
     "@vscode/test-electron": "^2.5.2",
+    "esbuild": "^0.27.0",
     "eslint": "^9.17.0",
     "glob": "^11.0.3",
     "globals": "^16.3.0",

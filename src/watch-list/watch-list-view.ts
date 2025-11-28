@@ -7,7 +7,7 @@ import {
   loadTemplate,
   stripAnsi,
 } from "../utils/html-utils";
-import { renderResultAsHtml, isRichResult } from "../utils/result-renderer";
+import { isRichResult, renderResultAsHtml } from "../utils/result-renderer";
 import { getLineHeight } from "../utils/vscode-apis";
 
 /**
@@ -134,7 +134,10 @@ export class WatchListView implements vscode.WebviewViewProvider {
             } else {
               // Already has <pre> tag with escaped content
               // Just add the class to the existing pre tag
-              resultHtml = rendered.replace('<pre>', `<pre class="${resultClass}">`);
+              resultHtml = rendered.replace(
+                "<pre>",
+                `<pre class="${resultClass}">`,
+              );
             }
           } else {
             resultClass = "watch-value";
@@ -197,7 +200,10 @@ export class WatchListView implements vscode.WebviewViewProvider {
           break;
         case "addWatch":
           if (this.currentFileUri && message.expression) {
-            this.callbacks?.onAddWatch?.(message.expression, this.currentFileUri);
+            this.callbacks?.onAddWatch?.(
+              message.expression,
+              this.currentFileUri,
+            );
           }
           break;
       }
@@ -239,7 +245,7 @@ export class WatchListView implements vscode.WebviewViewProvider {
       ),
     );
 
-    webview.html = loadTemplate("templates/watch-list/watch-list.html", {
+    webview.html = loadTemplate("watch-list/watch-list.html", {
       nonce,
       cspSource: webview.cspSource,
       codiconsUri: codiconsUri.toString(),

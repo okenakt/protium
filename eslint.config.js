@@ -35,4 +35,16 @@ export default [
       "no-undef": "warn",
     },
   },
+  {
+    files: ["**/*.js"],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        ...globals.es6,
+        ...globals.mocha,
+      },
+      ecmaVersion: 2020,
+      sourceType: "module",
+    },
+  },
 ];

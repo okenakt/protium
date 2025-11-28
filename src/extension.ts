@@ -1,7 +1,9 @@
+import * as path from "path";
 import * as vscode from "vscode";
 import { ExecutionManager } from "./execution";
 import { KernelMonitor } from "./kernel-monitor";
 import { ResultDisplayManager } from "./result-display";
+import { setTemplatesDir } from "./utils/html-utils";
 import { initializeLogger, logInfo } from "./utils/output-logger";
 import { getActiveEditor, isPythonEditor } from "./utils/vscode-apis";
 import { WatchListManager, WatchListView } from "./watch-list";
@@ -45,6 +47,10 @@ export function activate(context: vscode.ExtensionContext) {
   // Initialize output channel for logging
   const outputChannel = initializeLogger("Protium");
   context.subscriptions.push(outputChannel);
+
+  // Set templates directory for template resolution
+  // Works for both tsc (out/templates) and esbuild (dist/templates)
+  setTemplatesDir(path.join(__dirname, "templates"));
 
   // Initialize watch list manager
   watchListManager = new WatchListManager();

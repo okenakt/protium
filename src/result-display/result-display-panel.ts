@@ -86,14 +86,11 @@ export class ResultDisplayPanel {
       `Generate base HTML with lineHeight: ${lineHeight}, maxLines: ${maxLines}`,
     );
 
-    const baseHTML = loadTemplate(
-      "templates/result-display/result-panel.html",
-      {
-        lineHeight: lineHeight,
-        maxLines: maxLines,
-        nonce: nonce,
-      },
-    );
+    const baseHTML = loadTemplate("result-display/result-panel.html", {
+      lineHeight: lineHeight,
+      maxLines: maxLines,
+      nonce: nonce,
+    });
     this.panel.webview.html = baseHTML;
   }
 

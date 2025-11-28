@@ -140,7 +140,7 @@ export class KernelMonitor implements vscode.WebviewViewProvider {
     );
 
     this.view.webview.html = loadTemplate(
-      "templates/kernel-monitor/kernel-monitor.html",
+      "kernel-monitor/kernel-monitor.html",
       {
         cspSource: this.view.webview.cspSource,
         nonce: nonce,
@@ -173,7 +173,7 @@ export class KernelMonitor implements vscode.WebviewViewProvider {
     const statusText =
       kernel.status.charAt(0).toUpperCase() + kernel.status.slice(1);
 
-    return loadTemplate("templates/kernel-monitor/table-row.html", {
+    return loadTemplate("kernel-monitor/table-row.html", {
       kernelId: escapeHtml(kernel.id),
       kernelName: escapeHtml(kernel.name),
       statusClass: statusClass,
@@ -183,5 +183,4 @@ export class KernelMonitor implements vscode.WebviewViewProvider {
       filesDisplay: filesDisplay,
     });
   }
-
 }
