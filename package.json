@@ -2,7 +2,7 @@
   "name": "protium",
   "displayName": "Protium",
   "description": "Interactive Python environment for VS Code with flexible execution in your workflow",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "publisher": "okenakt",
   "icon": "./images/icon.png",
   "license": "MIT",
