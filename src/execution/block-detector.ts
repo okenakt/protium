@@ -78,7 +78,7 @@ export class BlockDetector {
     document: vscode.TextDocument,
     startLine: number,
   ): number {
-    const startLineText = document.lineAt(startLine).text;
+    let startLineText = document.lineAt(startLine).text;
     const startIndent = this.getIndentLevel(startLineText);
     let lastBlockLine = startLine;
     let unclosedBrackets = this.countBrackets(startLineText);
@@ -134,6 +134,11 @@ export class BlockDetector {
         // 5b. Continuation keyword (elif, else, except, etc.)
         if (this.isContinuationKeyword(lineText, startLineText)) {
           lastBlockLine = line;
+          // If started with decorator, update startLineText to the definition
+          // so that future continuations are checked against this definition
+          if (/^\s*@\w+/.test(startLineText)) {
+            startLineText = lineText;
+          }
           continue;
         }
 
