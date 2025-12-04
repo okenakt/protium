@@ -1,5 +1,12 @@
 # Change Log
 
+## v1.0.4
+
+`2025-12-04`
+
+- Fix codicons bugs
+- Refactor watch list
+
 ## v1.0.3
 
 `2025-12-02`
