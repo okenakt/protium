@@ -14,13 +14,21 @@ CLAUDE.md
 eslint.config.js
 esbuild.js
 
-# Exclude all node_modules except zeromq and cmake-ts runtime files
+# Exclude all node_modules except runtime files
 node_modules/**
+# zeromq
 !node_modules/zeromq/build
 !node_modules/zeromq/lib/**/*.js
 !node_modules/zeromq/draft.js
 !node_modules/zeromq/v5-compat.js
 !node_modules/zeromq/package.json
 !node_modules/zeromq/LICENSE*.txt
+# cmake-ts
 !node_modules/cmake-ts/build/*.js
 !node_modules/cmake-ts/package.json
+# codicons
+!node_modules/@vscode/codicons/dist/codicon.css
+!node_modules/@vscode/codicons/dist/codicon.ttf
+!node_modules/@vscode/codicons/package.json
+!node_modules/@vscode/codicons/LICENSE
+!node_modules/@vscode/codicons/LICENSE-CODE
