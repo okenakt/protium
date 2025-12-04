@@ -116,53 +116,38 @@ export class WatchListView implements vscode.WebviewViewProvider {
 
     return watches
       .map((w) => {
-        let resultClass: string;
         let resultHtml: string;
 
         if (w.error) {
-          resultClass = "watch-error";
-          resultHtml = `<pre class="${resultClass}">${escapeHtml(stripAnsi(w.error))}</pre>`;
+          resultHtml = `<pre class="watch-error">${escapeHtml(stripAnsi(w.error))}</pre>`;
         } else if (w.value !== undefined) {
           // Use common result renderer
           const rendered = renderResultAsHtml(w.mimeData, w.value);
           if (rendered) {
-            resultClass = "watch-value";
             // If it's rich HTML (images, tables, etc.), wrap in div
             // Otherwise it's already wrapped in <pre> by renderResultAsHtml
             if (isRichResult(w.mimeData)) {
-              resultHtml = `<div class="${resultClass}">${rendered}</div>`;
+              resultHtml = `<div class="watch-value">${rendered}</div>`;
             } else {
               // Already has <pre> tag with escaped content
               // Just add the class to the existing pre tag
               resultHtml = rendered.replace(
                 "<pre>",
-                `<pre class="${resultClass}">`,
+                '<pre class="watch-value">',
               );
             }
           } else {
-            resultClass = "watch-value";
-            resultHtml = `<pre class="${resultClass}">No output</pre>`;
+            resultHtml = '<pre class="watch-value">No output</pre>';
           }
         } else {
-          resultClass = "watch-pending";
-          resultHtml = `<pre class="${resultClass}">Not evaluated yet</pre>`;
+          resultHtml = '<pre class="watch-pending">Not evaluated yet</pre>';
         }
 
-        // Build HTML manually to handle both pre and div content
-        return `<div class="watch-item">
-  <div class="watch-header">
-    <div class="watch-expr">${escapeHtml(w.expression)}</div>
-    <button class="action-btn refresh-btn" data-id="${w.id}" title="Refresh">
-      <i class="codicon codicon-refresh"></i>
-    </button>
-    <button class="action-btn delete-btn" data-id="${w.id}" title="Remove">
-      <i class="codicon codicon-trash"></i>
-    </button>
-  </div>
-  <div class="watch-result">
-    ${resultHtml}
-  </div>
-</div>`;
+        return loadTemplate("watch-list/watch-item.html", {
+          id: w.id,
+          expression: escapeHtml(w.expression),
+          resultHtml: resultHtml,
+        });
       })
       .join("");
   }
