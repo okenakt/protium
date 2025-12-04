@@ -218,6 +218,9 @@ export class WatchListView implements vscode.WebviewViewProvider {
     const webview = this.view.webview;
     const nonce = getNonce();
     const lineHeight = getLineHeight();
+    const maxLines = vscode.workspace
+      .getConfiguration("protium")
+      .get<number>("resultDisplay.maxLines", 20);
 
     const codiconsUri = webview.asWebviewUri(
       vscode.Uri.joinPath(
@@ -235,10 +238,13 @@ export class WatchListView implements vscode.WebviewViewProvider {
       cspSource: webview.cspSource,
       codiconsUri: codiconsUri.toString(),
       lineHeight: lineHeight,
+      maxLines: maxLines,
     });
 
     this.initialized = true;
 
-    logInfo(`Watch list view initialized with lineHeight: ${lineHeight}`);
+    logInfo(
+      `Watch list view initialized with lineHeight: ${lineHeight}, maxLines: ${maxLines}`,
+    );
   }
 }

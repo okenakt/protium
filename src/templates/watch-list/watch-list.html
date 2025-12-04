@@ -134,6 +134,7 @@
         border-bottom: 2px solid var(--vscode-panel-border);
         line-height: {{lineHeight}}px;
         min-height: {{lineHeight}}px;
+        max-height: calc({{maxLines}} * {{lineHeight}}px);
         padding: 0 4px;
         overflow: auto;
         display: flex;
@@ -160,6 +161,7 @@
       .watch-result img,
       .watch-result svg {
         max-width: 100%;
+        max-height: calc({{maxLines}} * {{lineHeight}}px - 16px);
         height: auto;
         width: auto;
         object-fit: contain;
