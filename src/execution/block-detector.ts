@@ -79,6 +79,12 @@ export class BlockDetector {
     startLine: number,
   ): number {
     let startLineText = document.lineAt(startLine).text;
+
+    // If starting from empty line or comment, return just that line
+    if (this.shouldSkipLine(startLineText)) {
+      return startLine;
+    }
+
     const startIndent = this.getIndentLevel(startLineText);
     let lastBlockLine = startLine;
     let unclosedBrackets = this.countBrackets(startLineText);
