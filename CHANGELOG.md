@@ -1,5 +1,11 @@
 # Change Log
 
+## v1.0.5
+
+`2026-01-30`
+
+- Fix block detector bugs
+
 ## v1.0.4
 
 `2025-12-04`
